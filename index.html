@@ -1,0 +1,1863 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<script src="https://unpkg.com/peerjs@1.5.4/dist/peerjs.min.js"></script>
+</head>
+<body>
+<title>培養戦線</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Dela+Gothic+One&family=JetBrains+Mono:wght@400;600&family=Zen+Kaku+Gothic+New:wght@400;700&display=swap">
+<style>
+/* Layout: 左にシャーレ（キャンバス）、右に縦長の管制パネル（時間・モード・全体マップ・陣営）。縦画面ではパネルが下へ。単一のダークな見た目 */
+:root{
+  --bg:#04070a;
+  --dish:#0a1519;
+  --rim:#1c3238;
+  --grid:rgba(150,215,220,.07);
+  --grid-strong:rgba(150,215,220,.16);
+  --ink:#dcefef;
+  --dim:#7d979b;
+  --panel:rgba(6,14,17,.82);
+  --panel-line:rgba(150,215,220,.18);
+  --side:#060d10;
+  --sel:rgba(63,230,210,.1);
+  --fog:rgba(2,5,7,.84);
+  --food:#cfe8b8;
+  --dna:#f3f6ff;
+  --warn:#ff4d5e;
+  --f0:#3fe6d2;
+  --f1:#ff5d73;
+  --f2:#ffbf3a;
+  --f3:#a98bff;
+  --f-display:'Dela Gothic One','Hiragino Sans','Yu Gothic',sans-serif;
+  --f-body:'Zen Kaku Gothic New','Hiragino Sans','Yu Gothic',sans-serif;
+  --f-data:'JetBrains Mono',ui-monospace,Consolas,monospace;
+  color-scheme:dark;
+}
+html,body{height:100%;overflow:hidden}
+body{margin:0}
+[hidden]{display:none!important}
+.code-row{display:flex;gap:8px}
+.code-row input{flex:1;min-width:0;font-family:var(--f-data);letter-spacing:.12em}
+body{background:var(--bg);color:var(--ink);font-family:var(--f-body);-webkit-user-select:none;user-select:none}
+
+#app{position:fixed;inset:0;display:grid;grid-template-columns:minmax(0,1fr) 280px}
+#stage{position:relative;min-width:0;min-height:0;overflow:hidden}
+#cv{position:absolute;inset:0;width:100%;height:100%;display:block;touch-action:none;cursor:crosshair}
+#side{display:flex;flex-direction:column;gap:16px;min-height:0;overflow-y:auto;background:var(--side);border-left:1px solid var(--panel-line);
+  padding:calc(14px + env(safe-area-inset-top,0px)) calc(14px + env(safe-area-inset-right,0px)) calc(14px + env(safe-area-inset-bottom,0px)) 14px;
+  font-family:var(--f-data);font-size:12px;font-variant-numeric:tabular-nums}
+.sec{display:grid;gap:8px;align-content:start;min-width:0}
+.hud-title{font-size:10px;letter-spacing:.14em;color:var(--dim);text-transform:uppercase}
+#timer{font-family:var(--f-display);font-size:30px;letter-spacing:.04em;line-height:1}
+#timer.low{color:var(--warn)}
+.stats{display:grid;grid-template-columns:auto 1fr;gap:3px 10px;color:var(--dim)}
+.stats b{color:var(--ink);font-weight:600;text-align:right}
+
+.modes{display:grid;gap:6px}
+.mode{display:grid;grid-template-columns:20px 1fr auto;align-items:center;gap:10px;text-align:left;background:transparent;border:1px solid var(--panel-line);border-radius:6px;padding:8px 10px;color:var(--ink);font:inherit;cursor:pointer}
+.mode svg{width:20px;height:20px;fill:var(--ink)}
+.mode b{font-family:var(--f-body);font-size:13px;font-weight:700}
+.mode b kbd{font-family:var(--f-data);font-weight:400;font-size:10px;color:var(--dim);margin-left:6px}
+.mode small{display:block;color:var(--dim);font-family:var(--f-body);font-size:11px;line-height:1.45;margin-top:2px}
+.mode .n{color:var(--dim);font-size:12px}
+.mode:hover{border-color:var(--dim)}
+.mode[aria-pressed="true"]{border-color:var(--f0);background:var(--sel)}
+.mode[aria-pressed="true"] svg{fill:var(--f0)}
+.mode:focus-visible{outline:2px solid var(--ink);outline-offset:2px}
+.seg{display:flex;flex-wrap:wrap;gap:4px}
+.seg button{flex:1 1 auto;display:inline-flex;align-items:center;justify-content:center;gap:5px;font:inherit;font-size:11px;color:var(--ink);background:transparent;border:1px solid var(--panel-line);border-radius:4px;padding:5px 7px;cursor:pointer;font-family:var(--f-body)}
+.seg button[aria-pressed="true"]{border-color:var(--f0);background:var(--sel)}
+.seg i{width:8px;height:8px;border-radius:50%;flex:none}
+.quit{font:inherit;font-family:var(--f-body);font-size:11px;color:var(--dim);background:transparent;border:1px solid var(--panel-line);border-radius:4px;padding:6px;cursor:pointer}
+.seg button:focus-visible,.quit:focus-visible{outline:2px solid var(--ink);outline-offset:2px}
+.btns{display:flex;flex-wrap:wrap;gap:10px}
+.btn:disabled{opacity:.4;cursor:not-allowed}
+.field{display:grid;gap:6px;max-width:320px}
+.field label{font-family:var(--f-data);font-size:11px;letter-spacing:.14em;color:var(--dim)}
+.field input{font:inherit;font-size:16px;color:var(--ink);background:var(--side);border:1px solid var(--panel-line);border-radius:6px;padding:10px 12px;-webkit-user-select:text;user-select:text}
+.field input:focus-visible{outline:2px solid var(--f0);outline-offset:1px}
+.seats{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}
+.seat{display:grid;gap:4px;text-align:left;font:inherit;color:var(--ink);background:transparent;border:1px solid var(--panel-line);border-radius:8px;padding:10px 12px;cursor:pointer;min-width:0}
+.seat b{display:flex;align-items:center;gap:8px;font-size:14px}
+.seat i{width:10px;height:10px;border-radius:50%;flex:none}
+.seat small{color:var(--dim);font-size:12px;min-height:1.4em;overflow-wrap:anywhere}
+.seat[aria-pressed="true"]{border-color:var(--f0);background:var(--sel)}
+.seat:focus-visible{outline:2px solid var(--ink);outline-offset:2px}
+.note{margin:0;color:var(--dim);font-size:13px;line-height:1.6}
+.btn.ghost{background:transparent;color:var(--ink);border:1px solid var(--panel-line)}
+.btn.small{font-size:14px;padding:8px 18px}
+.rooms{display:grid;gap:8px}
+.room-row{display:flex;align-items:center;justify-content:space-between;gap:12px;border:1px solid var(--panel-line);border-radius:8px;padding:10px 12px;min-width:0}
+.room-row span{display:grid;gap:2px;min-width:0}
+.room-row small{color:var(--dim);font-family:var(--f-data);font-size:11px}
+.seat-card{display:grid;gap:6px;align-content:start;border:1px solid var(--panel-line);border-radius:8px;padding:10px 12px;min-width:0}
+.seat-card b{display:flex;align-items:center;gap:8px;font-size:14px}
+.seat-card i{width:10px;height:10px;border-radius:50%;flex:none}
+.seat-card small{color:var(--dim);font-size:12px;overflow-wrap:anywhere}
+.seat-card.human small{color:var(--ink)}
+.seat-card.mine{border-color:var(--f0);background:var(--sel)}
+.seat-card .acts{display:flex;flex-wrap:wrap;gap:6px}
+.mini{font:inherit;font-family:var(--f-body);font-size:11px;color:var(--ink);background:transparent;border:1px solid var(--panel-line);border-radius:4px;padding:4px 8px;cursor:pointer}
+.mini:hover{border-color:var(--dim)}
+.mini:focus-visible{outline:2px solid var(--ink);outline-offset:2px}
+#map{width:100%;aspect-ratio:1;max-width:100%;display:block}
+.keys{color:var(--dim);font-size:11px;line-height:1.9}
+.keys kbd{font-family:var(--f-data);color:var(--ink);border:1px solid var(--panel-line);border-radius:3px;padding:0 4px}
+
+@media (max-aspect-ratio:1/1){
+  #app{grid-template-columns:minmax(0,1fr);grid-template-rows:minmax(0,1fr) auto}
+  #side{display:grid;grid-template-columns:minmax(0,120px) minmax(0,1fr);gap:10px 14px;max-height:46vh;border-left:0;border-top:1px solid var(--panel-line);
+    padding:10px max(12px,env(safe-area-inset-right,0px)) calc(10px + env(safe-area-inset-bottom,0px)) max(12px,env(safe-area-inset-left,0px))}
+  #sec-map{grid-column:1;grid-row:1 / span 2}
+  #sec-time,#sec-mode,#sec-fac{grid-column:2}
+  #sec-keys,.mode small{display:none}
+  #timer{font-size:22px}
+}
+.frow{display:grid;grid-template-columns:10px 1fr auto;align-items:center;gap:8px}
+.frow .sw{width:10px;height:10px;border-radius:50%}
+.frow .nm{font-family:var(--f-body);font-size:12px;white-space:nowrap}
+.frow .nm small{color:var(--dim);font-family:var(--f-data);margin-left:4px}
+.frow .val{text-align:right}
+.frow.out{opacity:.35}
+.frow.out .nm{text-decoration:line-through}
+#share{display:flex;height:6px;border-radius:3px;overflow:hidden;background:var(--rim)}
+#share span{display:block;height:100%;transition:width .3s}
+
+#touch{position:absolute;bottom:16px;left:50%;transform:translateX(-50%);display:none;gap:12px}
+#touch button{width:68px;height:68px;border-radius:50%;border:2px solid var(--f0);background:var(--panel);color:var(--ink);font-family:var(--f-display);font-size:14px;touch-action:none}
+#touch button:active,#touch button.on{background:var(--f0);color:var(--bg)}
+@media (pointer:coarse){#touch{display:flex}#sec-keys{display:none}}
+
+#toast{position:absolute;top:18%;left:50%;transform:translateX(-50%);font-family:var(--f-display);font-size:20px;color:var(--warn);pointer-events:none;opacity:0;transition:opacity .3s;text-align:center;white-space:nowrap}
+#toast.show{opacity:1}
+
+#overlay{position:fixed;inset:0;display:grid;place-items:center;padding-block:24px;padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));background:radial-gradient(circle at 50% 45%,rgba(4,7,10,.35),rgba(4,7,10,.88) 70%);overflow-y:auto}
+.card{width:min(520px,100%);display:grid;gap:18px}
+.eyebrow{font-family:var(--f-data);font-size:11px;letter-spacing:.2em;color:var(--f0)}
+h1{font-family:var(--f-display);font-weight:400;font-size:clamp(44px,11vw,76px);line-height:1;margin:0;letter-spacing:.02em;text-wrap:balance}
+h1 .sub{display:block;font-size:.3em;color:var(--dim);letter-spacing:.3em;margin-top:10px;font-family:var(--f-data)}
+.lead{margin:0;line-height:1.8;color:var(--ink);max-width:34em}
+.rules{list-style:none;margin:0;padding:0;display:grid;gap:8px;font-size:13px;line-height:1.6}
+.rules li{display:grid;grid-template-columns:96px 1fr;gap:12px;border-top:1px solid var(--panel-line);padding-top:8px}
+.rules li span:first-child{font-family:var(--f-data);color:var(--dim);font-size:11px;padding-top:2px}
+.factions{display:flex;flex-wrap:wrap;gap:14px;font-size:12px}
+.factions span{display:flex;align-items:center;gap:6px}
+.factions i{width:10px;height:10px;border-radius:50%;display:inline-block}
+.btn{justify-self:start;font-family:var(--f-display);font-size:18px;color:var(--bg);background:var(--f0);border:0;border-radius:999px;padding:14px 34px;cursor:pointer;letter-spacing:.06em}
+.btn:hover{filter:brightness(1.1)}
+.btn:focus-visible{outline:2px solid var(--ink);outline-offset:3px}
+.result-table{display:grid;gap:6px;font-family:var(--f-data);font-size:13px;font-variant-numeric:tabular-nums}
+.result-table div{display:grid;grid-template-columns:28px 12px 1fr auto auto;gap:10px;align-items:center;border-top:1px solid var(--panel-line);padding-top:6px}
+.result-table .me{color:var(--f0)}
+.result-table i{width:10px;height:10px;border-radius:50%}
+.result-table .nm{font-family:var(--f-body)}
+.mystats{font-family:var(--f-data);font-size:12px;color:var(--dim);display:flex;flex-wrap:wrap;gap:6px 18px}
+.mystats b{color:var(--ink)}
+@media (prefers-reduced-motion:reduce){#share span{transition:none}}
+</style>
+
+<div id="app">
+  <div id="stage">
+    <canvas id="cv"></canvas>
+    <div id="touch">
+      <button id="b-split" type="button">分裂</button>
+      <button id="b-fire" type="button">発射</button>
+      <button id="b-fuse" type="button">融合</button>
+    </div>
+    <div id="toast"></div>
+  </div>
+
+  <aside id="side">
+    <section class="sec" id="sec-time">
+      <div id="timer">5:00</div>
+      <div class="stats" id="my-stats">
+        <span>細胞数</span><b><span id="s-cells">0</span> / <span id="s-cap">100</span></b>
+        <span>バイオマス</span><b id="s-mass">0</b>
+        <span>プラスミド</span><b id="s-pl">0</b>
+      </div>
+    </section>
+
+    <section class="sec" id="sec-watch" hidden>
+      <div class="hud-title">観戦：視点</div>
+      <div class="seg" id="w-follow"></div>
+      <div class="hud-title">速さ</div>
+      <div class="seg" id="w-speed">
+        <button type="button" data-s="1">×1</button><button type="button" data-s="2">×2</button><button type="button" data-s="4">×4</button>
+      </div>
+      <button type="button" class="quit" id="w-quit">観戦をやめてタイトルへ</button>
+    </section>
+
+    <section class="sec" id="sec-mode">
+      <div class="hud-title">次に生まれる細胞のモード</div>
+      <div class="modes">
+        <button class="mode" type="button" data-mode="atk" aria-pressed="false">
+          <svg viewBox="-10 -10 20 20" aria-hidden="true"><path d="M0-9L7.8 4.5H-7.8Z"/></svg>
+          <span><b>攻撃<kbd>1</kbd></b><small>敵を探して撃つ。撃ち切ったら逃げて補給。分裂はしない</small></span>
+          <span class="n" id="mc-atk">0</span>
+        </button>
+        <button class="mode" type="button" data-mode="def" aria-pressed="false">
+          <svg viewBox="-10 -10 20 20" aria-hidden="true"><path d="M-7.5-8H7.5V0Q6 6.5 0 9Q-6 6.5-7.5 0Z"/></svg>
+          <span><b>防御<kbd>2</kbd></b><small>防御以外の味方に付き添い、プラスミドを入れて守る</small></span>
+          <span class="n" id="mc-def">0</span>
+        </button>
+        <button class="mode" type="button" data-mode="grow" aria-pressed="true">
+          <svg viewBox="-10 -10 20 20" aria-hidden="true"><path d="M-2.2-9H2.2V-2.2H9V2.2H2.2V9H-2.2V2.2H-9V-2.2H-2.2Z"/></svg>
+          <span><b>増殖<kbd>3</kbd></b><small>敵を避けて養分を集め、自分で増える</small></span>
+          <span class="n" id="mc-grow">0</span>
+        </button>
+      </div>
+    </section>
+
+    <section class="sec" id="sec-map">
+      <div class="hud-title">全体マップ</div>
+      <canvas id="map"></canvas>
+    </section>
+
+    <section class="sec" id="sec-fac">
+      <div class="hud-title">陣営別バイオマス</div>
+      <div id="share"></div>
+      <div id="frows"></div>
+    </section>
+
+    <section class="sec keys" id="sec-keys">
+      <div class="hud-title">操作</div>
+      <div>マウス：元祖細胞（点線の輪）が泳ぐ方向<br><kbd>Space</kbd> 分裂　<kbd>F</kbd>／右クリック 発射<br><kbd>Shift</kbd> 長押し 融合　<kbd>1</kbd><kbd>2</kbd><kbd>3</kbd> モード</div>
+    </section>
+  </aside>
+</div>
+
+<div id="overlay">
+  <div class="card" id="card"></div>
+</div>
+
+<script>
+(() => {
+const cv = document.getElementById('cv'), ctx = cv.getContext('2d');
+const css = getComputedStyle(document.documentElement);
+const tok = n => css.getPropertyValue(n).trim();
+const C = {bg:tok('--bg'), dish:tok('--dish'), rim:tok('--rim'), grid:tok('--grid'), gridS:tok('--grid-strong'), food:tok('--food'), dna:tok('--dna'), warn:tok('--warn'), ink:tok('--ink'), dim:tok('--dim'), side:tok('--side'), fog:tok('--fog')};
+
+const FACTIONS = [
+  // mix：AI陣営（とデモ中のシアン株）が子細胞に割り当てるモードの比率
+  {name:'シアン株', latin:'C. cyanea', color:tok('--f0'), ai:false, aggr:.6,  mix:{atk:.3, def:.3, grow:.4}},
+  {name:'ルブラ株', latin:'R. rubra',  color:tok('--f1'), ai:true,  aggr:.85, mix:{atk:.5, def:.2, grow:.3}},
+  {name:'アウレア株', latin:'A. aurea', color:tok('--f2'), ai:true, aggr:.4,  mix:{atk:.15,def:.35,grow:.5}},
+  {name:'ビオラ株', latin:'V. viola',  color:tok('--f3'), ai:true,  aggr:.65, mix:{atk:.33,def:.33,grow:.34}},
+];
+const TAU = Math.PI*2;
+const DISH_R = 2400, GRID = 160, GN = Math.ceil(DISH_R*2/GRID)+1;
+const MIN_SPLIT = 36, P_MAX = 9, DNA_N = 90, CAP = 100, FOOD_N = 1900, MATCH_TIME = 300;
+// 養分は最初 FOOD_START 個だけ。残りは FOOD_RAMP 秒かけて少しずつ湧いて FOOD_N 個まで増える
+const FOOD_START = 600, FOOD_RAMP = 200;
+const MATCH_LABEL = `${MATCH_TIME/60}分`;
+const SPEED = 150;
+// 抗生物質イベント（一時的に停止中。true で復活）
+const USE_ANTIBIOTIC = false;
+
+const rad = m => 3 + Math.sqrt(m)*3.2;
+// 大きさごとのプラスミド容量：3 → 5 → 7 → 9
+const capOf = m => m<35 ? 3 : m<60 ? 5 : m<90 ? 7 : 9;
+// 拾って埋められる上限。攻撃モードは分裂しないよう 8 で止める
+const holdCap = c => c.mode==='atk' && !c.leader ? Math.min(capOf(c.mass),P_MAX-1) : capOf(c.mass);
+// 次の分裂で生まれる細胞のモード（atk / def / grow）。プレイヤーが選ぶ
+let selMode='grow';
+function pickMode(f){ const m=FACTIONS[f].mix; let r=Math.random(); for(const k in m){ r-=m[k]; if(r<=0) return k; } return 'grow'; }
+// 人が操作する陣営と、その入力。この画面の操作は INP[ME] に、オンラインの参加者の操作は presence から入る
+let ME=0, HUM=[true,false,false,false], NAMES=['','','',''];
+const blankInput=()=>({x:0,y:0,fu:false,sp:0,fi:0,m:'grow'});
+let INP=[0,1,2,3].map(blankInput), SEEN=[0,1,2,3].map(()=>({sp:0,fi:0}));
+const human = f => !S.demo && HUM[f];
+const modeFor = f => human(f) ? INP[f].m : pickMode(f);
+// AIの陣営は全体の能力（速さ・発射の間隔）を0.9倍にする
+const AI_POWER = 0.9;
+const aiK = c => human(c.f) ? 1 : AI_POWER;
+const esc = s => String(s).replace(/[&<>"']/g, ch=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[ch]));
+const cleanName = s => String(s||'').replace(/[\u0000-\u001f\u007f-\u009f​-‏‪-‮⁦-⁩]/g,'').trim().slice(0,10);
+const rand = (a,b) => a + Math.random()*(b-a);
+const randInDish = (margin=60) => { const a=Math.random()*TAU, d=Math.sqrt(Math.random())*(DISH_R-margin); return [Math.cos(a)*d, Math.sin(a)*d]; };
+
+const stage = document.getElementById('stage'), mapCv = document.getElementById('map'), mctx = mapCv.getContext('2d');
+let vw, vh, dpr, vignette, vigCv=null, mapS = 200;
+function resize(){
+  // 高解像度の画面でも1.5倍までに抑える（ピクセル数が多いほど重い）
+  dpr = Math.min(1.5, window.devicePixelRatio||1);
+  vw = stage.clientWidth || innerWidth; vh = stage.clientHeight || innerHeight;
+  cv.width = vw*dpr; cv.height = vh*dpr;
+  const R = Math.hypot(vw,vh)/2;
+  vignette = ctx.createRadialGradient(vw/2,vh/2,R*0.55,vw/2,vh/2,R);
+  vignette.addColorStop(0,'rgba(0,0,0,0)'); vignette.addColorStop(1,'rgba(0,0,0,.7)');
+  // 周辺の暗さは画面サイズが変わったときだけ、半分の細かさの下絵に描いておく
+  vigCv=vigCv||document.createElement('canvas');
+  vigCv.width=Math.max(1,Math.round(vw/2)); vigCv.height=Math.max(1,Math.round(vh/2));
+  const vg=vigCv.getContext('2d'); vg.setTransform(.5,0,0,.5,0,0); vg.clearRect(0,0,vw,vh); vg.fillStyle=vignette; vg.fillRect(0,0,vw,vh);
+  mapS = mapCv.clientWidth || 200; mapCv.width = mapS*dpr; mapCv.height = mapS*dpr;
+}
+addEventListener('resize', resize); resize();
+if(window.ResizeObserver) new ResizeObserver(resize).observe(stage);
+
+// ---------- state ----------
+let cells=[], foods=[], dnas=[], shots=[], parts=[], zones=[], S, counts=[0,0,0,0], cellGrid, foodGrid, uid=0;
+
+// demo：タイトル背景の自動対戦。watch：AI同士の観戦（demo と同じく全陣営AIだが、時間制限と結果がある）
+// opts（オンライン対戦用）：net='host'|'client'、me＝この画面の陣営（-1 は観戦）、hum＝人が操作する陣営、names＝名前
+function newGame(demo, watch=false, opts={}){
+  cells=[]; foods=[]; dnas=[]; shots=[]; parts=[]; zones=[];
+  ME = opts.me ?? 0; HUM = opts.hum || [true,false,false,false]; NAMES = opts.names || ['','','',''];
+  INP=[0,1,2,3].map(blankInput); SEEN=[0,1,2,3].map(()=>({sp:0,fi:0}));
+  S = {t:0, time:MATCH_TIME, over:false, demo, watch, net:opts.net||null, nameNo:[0,0,0,0], follow:-1, speed:1, nextZone:18, sanct:null, nextSanct:45, sanctId:0, eaten:0, peak:0, splits:0, dnaGot:0, converted:0, hijacked:0,
+       cam:{x:0,y:0,z:demo?0.32:0.9}, mass:[0,0,0,0], out:[false,false,false,false], leaders:[null,null,null,null]};
+  for(let i=0;i<FOOD_N;i++){
+    const [x,y]=randInDish(20), late=i>=FOOD_START;
+    foods.push({x,y,v:rand(1,2.4),alive:!late,respawn:late?(i-FOOD_START)/(FOOD_N-FOOD_START)*FOOD_RAMP:0,ph:Math.random()*TAU});
+  }
+  for(let i=0;i<DNA_N;i++){ const [x,y]=randInDish(40); dnas.push({x,y,f:-1,alive:true,respawn:0,ph:Math.random()*TAU}); }
+  FACTIONS.forEach((f,i)=>{
+    const a=i*Math.PI/2+Math.PI/4, d=DISH_R*0.62, cx=Math.cos(a)*d, cy=Math.sin(a)*d;
+    // 各陣営は元祖細胞1つから始まる
+    S.leaders[i]=addCell(i, cx, cy, 40);
+    S.leaders[i].leader=true;
+  });
+  if(!demo && ME>=0){ S.cam.x=S.leaders[ME].x; S.cam.y=S.leaders[ME].y; }
+  buildFrows();
+  explored=new Uint8Array(FOG_N*FOG_N); mine=[];
+}
+
+function addCell(f,x,y,m,pl){
+  const c={id:uid++,f,x,y,pl:pl||[f,f],pt:rand(2,4.5),fireCd:0,mode:'grow',leader:false,no:0,ally:null,giveCd:0,vx:0,vy:0,ix:0,iy:0,dx:0,dy:0,mass:m,r:rad(m),splitCd:1.5,fuseCd:3,pop:0,
+           seed:Math.random()*10,axis:Math.random()*TAU,think:Math.random()*.3,wx:null,wy:null,dead:false};
+  cells.push(c); return c;
+}
+
+// ---------- spatial grid ----------
+const gkey = (x,y) => Math.floor((x+DISH_R)/GRID) + Math.floor((y+DISH_R)/GRID)*GN;
+function buildGrid(arr){
+  const g=new Map();
+  for(const o of arr){ if(o.dead||o.alive===false) continue; const k=gkey(o.x,o.y); let b=g.get(k); if(!b) g.set(k,b=[]); b.push(o); }
+  return g;
+}
+const clampG = v => Math.max(0, Math.min(GN-1, v));
+function query(g,x,y,r,fn){
+  const x0=clampG(Math.floor((x-r+DISH_R)/GRID)), x1=clampG(Math.floor((x+r+DISH_R)/GRID));
+  const y0=clampG(Math.floor((y-r+DISH_R)/GRID)), y1=clampG(Math.floor((y+r+DISH_R)/GRID));
+  for(let gy=y0;gy<=y1;gy++) for(let gx=x0;gx<=x1;gx++){ const b=g.get(gx+gy*GN); if(b) for(const o of b) fn(o); }
+}
+
+function centroid(f){
+  let x=0,y=0,m=0;
+  for(const c of cells) if(!c.dead&&c.f===f){ x+=c.x*c.mass; y+=c.y*c.mass; m+=c.mass; }
+  return m ? {x:x/m, y:y/m, m} : null;
+}
+
+// ---------- cell actions ----------
+// プラスミドはランダムに子へ floor、親へ ceil で分配（9個なら4個と5個）
+function divide(c,dx,dy,power,force){
+  if((!force && c.mass<MIN_SPLIT) || counts[c.f]>=CAP) return null;
+  const l=Math.hypot(dx,dy)||1; dx/=l; dy/=l;
+  c.mass/=2; c.r=rad(c.mass);
+  shuffle(c.pl);
+  const n=addCell(c.f, c.x+dx*c.r, c.y+dy*c.r, c.mass, c.pl.splice(0,Math.floor(c.pl.length/2)));
+  c.pt=n.pt=rand(3,4.5);
+  n.mode=modeFor(c.f); n.no=++S.nameNo[c.f];
+  n.ix=dx*power; n.iy=dy*power; c.ix-=dx*power*.15; c.iy-=dy*power*.15;
+  c.splitCd=n.splitCd=1.2; c.fuseCd=n.fuseCd=4; n.dx=c.dx; n.dy=c.dy; n.axis=Math.atan2(dy,dx);
+  counts[c.f]++;
+  if(c.f===ME && !S.demo) S.splits++;
+  burst(n.x,n.y,FACTIONS[c.f].color,4,60);
+  checkConvert(c); checkConvert(n);
+  return n;
+}
+function merge(a,b){
+  const m=a.mass+b.mass;
+  a.x=(a.x*a.mass+b.x*b.mass)/m; a.y=(a.y*a.mass+b.y*b.mass)/m;
+  a.mass=m; a.r=rad(m); a.fuseCd=.6;
+  a.pl=a.pl.concat(b.pl).sort((x,y)=>(y===a.f)-(x===a.f)).slice(0,Math.min(P_MAX-1,capOf(m))); a.splitCd=Math.max(a.splitCd,1); a.pop=.5;
+  a.leader=a.leader||b.leader;
+  b.dead=true; counts[b.f]--;
+  checkConvert(a);
+}
+// 漂うプラスミドを取り込めるか：空き枠がある、または自分の色になるもので外来を治せる
+function canTake(c,dn){
+  if(c.pl.length<holdCap(c)) return true;
+  return (dn.f<0 || dn.f===c.f) && c.pl.some(p=>p!==c.f);
+}
+function ownCount(c){ let n=0; for(const q of c.pl) if(q===c.f) n++; return n; }
+function shuffle(a){ for(let i=a.length-1;i>0;i--){ const j=Math.floor(Math.random()*(i+1)); [a[i],a[j]]=[a[j],a[i]]; } return a; }
+// 外来プラスミドが自分の色より多くなると、その色の陣営に乗っ取られる
+function checkConvert(c){
+  if(c.dead) return;
+  const cnt=[0,0,0,0]; for(const q of c.pl) cnt[q]++;
+  let best=c.f; for(let g=0;g<cnt.length;g++) if(cnt[g]>cnt[best]) best=g;
+  if(best===c.f) return;
+  // 乗っ取る側が上限に達していたら、寝返らずに溶菌する
+  if(counts[best]>=CAP){ kill(c); return; }
+  const from=c.f; c.f=best; counts[from]--; counts[best]++; c.leader=false; c.mode=modeFor(best); c.no=++S.nameNo[best]; c.ally=null;
+  c.pop=Math.min(c.pop,.5); c.think=0; c.wx=null;
+  burst(c.x,c.y,FACTIONS[best].color,8,90);
+  if(!S.demo){
+    if(best===ME) S.converted++;
+    if(from===ME) S.hijacked++;
+    if(human(best)) notify(best, FACTIONS[from].name+'の細胞を乗っ取った');
+    if(human(from)) notify(from, '細胞が'+FACTIONS[best].name+'に乗っ取られた');
+  }
+}
+// 撃てるか：自分の色が1つ以上あり、1つ減らしても他のどの色にも数で負けない（撃って乗っ取られることはない）
+function canFire(c){
+  const cnt=[0,0,0,0]; for(const q of c.pl) cnt[q]++;
+  if(cnt[c.f]<1) return false;
+  cnt[c.f]--;
+  for(let g=0;g<cnt.length;g++) if(g!==c.f && cnt[g]>cnt[c.f]) return false;
+  return true;
+}
+// 自分の色のプラスミドを1つ撃ち出す
+function fire(c,dx,dy){
+  if(!canFire(c)) return false;
+  const i=c.pl.lastIndexOf(c.f);
+  c.pl.splice(i,1);
+  const l=Math.hypot(dx,dy)||1; dx/=l; dy/=l;
+  shots.push({x:c.x+dx*c.r,y:c.y+dy*c.r,vx:dx*720+c.vx*.5,vy:dy*720+c.vy*.5,f:c.f,from:c.id,life:1.1,hit:false});
+  c.fireCd=.45/aiK(c);
+  checkConvert(c);
+  return true;
+}
+function kill(c){
+  if(c.dead) return; c.dead=true; counts[c.f]--;
+  burst(c.x,c.y,FACTIONS[c.f].color,10,120);
+}
+function burst(x,y,color,n,sp){
+  for(let i=0;i<n;i++){ const a=Math.random()*TAU, s=rand(.3,1)*sp; parts.push({x,y,vx:Math.cos(a)*s,vy:Math.sin(a)*s,life:rand(.4,.9),max:.9,color}); }
+}
+
+// ---------- steering ----------
+// 分裂で生まれた細胞：モードに従って1つずつ自分で動く（全陣営共通）
+function steerMode(c,dt){
+  const L=S.leaders[c.f];
+  // 融合中はプレイヤーの細胞が元祖細胞のもとへ集まる
+  if(human(c.f) && INP[c.f].fu && L){ setDir(c,L.x-c.x,L.y-c.y); return; }
+  if(c.mode==='atk') steerAttack(c,dt);
+  else if(c.mode==='def') steerDefend(c,dt,L);
+  else steerGrow(c,dt);
+}
+
+function setDir(c,dx,dy){ const l=Math.hypot(dx,dy)||1; c.dx=dx/l; c.dy=dy/l; }
+
+function steerAI(c,dt){
+  c.think-=dt; if(c.think>0) return;
+  c.think=rand(.18,.36);
+  const f=FACTIONS[c.f];
+  // AIの元祖細胞は、プレイヤーの Space と同じように大きくなったら分裂して子を出す
+  if(c.leader && c.mass>=70 && c.splitCd<=0 && Math.random()<.2){ const a=Math.random()*TAU; divide(c,Math.cos(a),Math.sin(a),420); }
+  // 抗生物質ゾーンから逃げる
+  for(const z of zones){
+    const d=Math.hypot(c.x-z.x,c.y-z.y);
+    if(d<z.r+c.r+90){ setDir(c,c.x-z.x+rand(-20,20),c.y-z.y+rand(-20,20)); return; }
+  }
+  let near=null,nd=1e9,crowd=0;
+  query(cellGrid,c.x,c.y,420,o=>{
+    if(o.dead||o.f===c.f||blocked(c,o.x,o.y)) return;
+    const d=Math.hypot(o.x-c.x,o.y-c.y);
+    if(d<nd){nd=d;near=o;}
+    if(d<220) crowd++;
+  });
+  const own=ownCount(c);
+  const sg=sanctGoal(c, inDanger(c,near,nd));
+  if(sg){ setDir(c,sg.x-c.x,sg.y-c.y); return; }
+  // 撃っても自分の色が多数派のままなら撃つ
+  if(near && nd<380 && c.fireCd<=0 && own>=2 && own-1>c.pl.length-own && Math.random()<f.aggr*.15) fire(c,near.x-c.x,near.y-c.y);
+  // 弾が少ない・敵に囲まれているときは距離を取る
+  if(near && nd<200 && (own<2 || crowd>=3) && Math.random()>f.aggr*.5){ setDir(c,c.x-near.x,c.y-near.y); return; }
+  // 攻撃的な株は弾があれば敵に寄っていく
+  if(near && own>=3 && nd>260 && Math.random()<f.aggr*.5){ setDir(c,near.x-c.x,near.y-c.y); return; }
+  seekFood(c);
+}
+
+// 近くの養分・プラスミドへ向かう。何もなければ home の周り（なければシャーレ全体）を徘徊
+function seekFood(c,home){
+  let best=null,bd=1e12;
+  query(foodGrid,c.x,c.y,340,fd=>{
+    if(!fd.alive || blocked(c,fd.x,fd.y)) return;
+    const d=(fd.x-c.x)**2+(fd.y-c.y)**2-fd.v*500;
+    if(d<bd){bd=d;best=fd;}
+  });
+  for(const dn of dnas){
+    if(!dn.alive || (dn.f>=0 && dn.f!==c.f) || !canTake(c,dn) || blocked(c,dn.x,dn.y)) continue;
+    const d2=(dn.x-c.x)**2+(dn.y-c.y)**2;
+    if(d2<160000 && d2-40000<bd){ bd=d2-40000; best=dn; }
+  }
+  if(best){ setDir(c,best.x-c.x,best.y-c.y); return; }
+  if(c.wx===null || Math.hypot(c.wx-c.x,c.wy-c.y)<80){
+    if(home){ const a=Math.random()*TAU, d=rand(80,320); c.wx=home.x+Math.cos(a)*d; c.wy=home.y+Math.sin(a)*d; }
+    else { const [x,y]=randInDish(150); c.wx=x; c.wy=y; }
+  }
+  setDir(c,c.wx-c.x,c.wy-c.y);
+}
+
+// ---------- 保護区 ----------
+// 一番弱い陣営の近くに、計算盤の太線の1マス（400×400）が「保護区」として20秒だけ現れる。
+// 最初に入った陣営の色だけが入れ、他の色の細胞は押し出され、プラスミドは跳ね返される（追い上げのための救済）
+const SANCT_SIZE=400, SANCT_LIFE=20;
+const inSanct=(z,x,y,m=0)=>x>z.x-m && x<z.x+z.s+m && y>z.y-m && y<z.y+z.s+m;
+// c が入れない保護区の中か（AIが目標から外すのに使う）
+const blocked=(c,x,y)=>{ const z=S.sanct; return !!z && z.owner>=0 && z.owner!==c.f && inSanct(z,x,y,c.r); };
+function spawnSanct(){
+  let w=-1; for(let f=0;f<FACTIONS.length;f++) if(counts[f]>0 && (w<0 || S.mass[f]<S.mass[w])) w=f;
+  if(w<0) return;
+  const L=S.leaders[w] || centroid(w); if(!L) return;
+  // その陣営の近くで、正方形が丸ごとシャーレに収まり、他の陣営の細胞がいないマスを探す
+  for(let k=0;k<20;k++){
+    const x=Math.floor((L.x+rand(-500,500))/SANCT_SIZE)*SANCT_SIZE, y=Math.floor((L.y+rand(-500,500))/SANCT_SIZE)*SANCT_SIZE;
+    const far=Math.max(Math.hypot(x,y),Math.hypot(x+SANCT_SIZE,y),Math.hypot(x,y+SANCT_SIZE),Math.hypot(x+SANCT_SIZE,y+SANCT_SIZE));
+    const z={x,y,s:SANCT_SIZE};
+    if(far<DISH_R-30 && !cells.some(c=>c.f!==w && inSanct(z,c.x,c.y,c.r))){
+      S.sanct={x,y,s:SANCT_SIZE,t:SANCT_LIFE,owner:-1,for:w,id:++S.sanctId};
+      // 保護区の中は養分とプラスミドが約1.5倍：ふだんの密度の半分ぶんを上乗せし、保護区がある間は中で湧き直す
+      const area=SANCT_SIZE*SANCT_SIZE/(Math.PI*DISH_R*DISH_R);
+      const nf=Math.ceil(FOOD_N*area*.5), nd=Math.max(2,Math.round(DNA_N*area*.5));
+      for(let i=0;i<nf;i++) foods.push({x:x+rand(10,SANCT_SIZE-10),y:y+rand(10,SANCT_SIZE-10),v:rand(1,2.4),alive:true,respawn:0,ph:Math.random()*TAU,zid:S.sanct.id});
+      for(let i=0;i<nd;i++) dnas.push({x:x+rand(20,SANCT_SIZE-20),y:y+rand(20,SANCT_SIZE-20),f:-1,alive:true,respawn:0,ph:Math.random()*TAU,zid:S.sanct.id});
+      if(!S.demo || S.watch) toast(`${FACTIONS[w].name}の近くに保護区が出現（${SANCT_LIFE}秒）`);
+      return;
+    }
+  }
+}
+// 半径 r の物体が保護区に重なっていたら、一番近い辺の外へ出す。k は跳ね返りの強さ（細胞は弱く、弾は完全に反射）
+function pushOut(z,o,r,k){
+  if(!inSanct(z,o.x,o.y,r)) return false;
+  const dl=o.x-(z.x-r), dr=z.x+z.s+r-o.x, dt=o.y-(z.y-r), db=z.y+z.s+r-o.y, m=Math.min(dl,dr,dt,db);
+  if(m===dl){ o.x=z.x-r; if(o.vx>0) o.vx=-o.vx*k; if(o.ix>0) o.ix=0; }
+  else if(m===dr){ o.x=z.x+z.s+r; if(o.vx<0) o.vx=-o.vx*k; if(o.ix<0) o.ix=0; }
+  else if(m===dt){ o.y=z.y-r; if(o.vy>0) o.vy=-o.vy*k; if(o.iy>0) o.iy=0; }
+  else { o.y=z.y+z.s+r; if(o.vy<0) o.vy=-o.vy*k; if(o.iy<0) o.iy=0; }
+  return true;
+}
+function sanctTick(dt){
+  const z=S.sanct;
+  if(!z){ S.nextSanct-=dt; if(S.nextSanct<=0){ S.nextSanct=rand(35,45); spawnSanct(); } return; }
+  z.t-=dt;
+  if(z.t<=0){ S.sanct=null; return; }
+  if(z.owner<0) for(const c of cells) if(!c.dead && inSanct(z,c.x,c.y)){
+    z.owner=c.f;
+    if(human(c.f)) notify(c.f,'保護区を確保した。他の色は入れない');
+    if(ME>=0 && ME!==c.f && !S.demo) toast(`保護区は${FACTIONS[c.f].name}が確保した`);
+    break;
+  }
+}
+// AIの「危ない」：近くに敵がいて、弾（自分の色）が少ない・外来プラスミドが入っている・相手のほうが大きい
+function inDanger(c,near,nd){
+  if(!near || nd>320) return false;
+  const own=ownCount(c);
+  return own<3 || c.pl.length-own>0 || near.mass>c.mass*1.3;
+}
+// AIの保護区の使い方：自分のために出た未確保の保護区は取りに行く。危ないときは、未確保か自分の色の保護区へ逃げ込み、
+// 中にいるなら危険が去るまで留まる。他の色の保護区には入れないので目指さない（消える直前も目指さない）
+function sanctGoal(c,danger){
+  const z=S.sanct; if(!z || (z.owner>=0 && z.owner!==c.f)) return null;
+  const cx=z.x+z.s/2, cy=z.y+z.s/2, d=Math.hypot(cx-c.x,cy-c.y);
+  if(z.owner<0 && z.for===c.f && d<1400) return {x:cx,y:cy};
+  if(danger && z.t>3 && d<1000) return {x:cx+rand(-80,80),y:cy+rand(-80,80)};
+  return null;
+}
+
+// ---------- モード別行動 ----------
+// 攻撃：近くの敵を探し、撃てる距離を保って撃つ。撃ち切ったら敵から逃げ、プラスミドが4個たまるまで補給する。分裂はしない
+function steerAttack(c,dt){
+  c.think-=dt; if(c.think>0) return;
+  c.think=rand(.15,.3);
+  // AIも自分の視界（霧と同じ半径）の中しか見ない
+  let near=null,nd=1e9; const vr=visR(c);
+  query(cellGrid,c.x,c.y,vr,o=>{
+    if(o.dead||o.f===c.f||blocked(c,o.x,o.y)) return;
+    const d=Math.hypot(o.x-c.x,o.y-c.y); if(d<vr && d<nd){nd=d;near=o;}
+  });
+  const own=ownCount(c), canShoot=own>=2 && own-1>c.pl.length-own;
+  if(!canShoot) c.retreat=true;
+  else if(own>=Math.min(4,holdCap(c))) c.retreat=false;
+  if(c.retreat){
+    // 撃ち切って危ないときは、入れる保護区があれば逃げ込む
+    const sg=sanctGoal(c, near && nd<500);
+    if(sg){ setDir(c,sg.x-c.x,sg.y-c.y); return; }
+    if(near && nd<500){ setDir(c,c.x-near.x,c.y-near.y); return; }
+    seekFood(c); return;
+  }
+  if(near){
+    if(nd<360 && c.fireCd<=0) fire(c,near.x-c.x,near.y-c.y);
+    const dx=near.x-c.x, dy=near.y-c.y, k=nd>260?1:-.6;
+    setDir(c,dx*k-dy*.35,dy*k+dx*.35); return;
+  }
+  seekFood(c);
+}
+// 増殖：近づく敵を避けながら養分とプラスミドを集め、自分で増える
+function steerGrow(c,dt){
+  c.think-=dt; if(c.think>0) return;
+  c.think=rand(.2,.35);
+  let near=null,nd=1e9;
+  query(cellGrid,c.x,c.y,260,o=>{
+    if(o.dead||o.f===c.f) return;
+    const d=Math.hypot(o.x-c.x,o.y-c.y); if(d<nd){nd=d;near=o;}
+  });
+  const sg=sanctGoal(c, inDanger(c,near,nd));
+  if(sg){ setDir(c,sg.x-c.x,sg.y-c.y); return; }
+  if(near && nd<200){ setDir(c,c.x-near.x,c.y-near.y); return; }
+  seekFood(c);
+}
+// 防御：防御モード以外の味方（元祖細胞・攻撃・増殖）を探して守る。
+// 外来プラスミドが入った味方や空きのある味方がいれば行って自分の色を入れ、いなければ一番近い味方に付き添って補給する
+function steerDefend(c,dt,L){
+  c.think-=dt;
+  if(c.think<=0){
+    c.think=rand(.25,.4);
+    let best=null,bs=-1e9,guard=null,gd=1e9;
+    query(cellGrid,c.x,c.y,700,o=>{
+      if(o===c||o.dead||o.f!==c.f||(o.mode==='def'&&!o.leader)) return;
+      const d=Math.hypot(o.x-c.x,o.y-c.y);
+      if(d<gd){gd=d;guard=o;}
+      const foreign=o.pl.length-ownCount(o), free=capOf(o.mass)-o.pl.length;
+      if(foreign<=0 && free<=0) return;
+      const s=foreign*3+free*.5-d/250;
+      if(s>bs){bs=s;best=o;}
+    });
+    c.ally=best; c.guard=guard||L;
+  }
+  if(c.ally && !c.ally.dead && c.ally.f===c.f && ownCount(c)>=2){ setDir(c,c.ally.x-c.x,c.ally.y-c.y); return; }
+  const g=c.guard && !c.guard.dead && c.guard.f===c.f ? c.guard : L;
+  if(g && Math.hypot(g.x-c.x,g.y-c.y)>g.r+c.r+120){ setDir(c,g.x-c.x,g.y-c.y); return; }
+  seekFood(c,g);
+}
+function followMouse(c,mw){
+  let dx=mw.x-c.x, dy=mw.y-c.y; const d=Math.hypot(dx,dy)||1;
+  const s=Math.min(1,d/90); c.dx=dx/d*s; c.dy=dy/d*s;
+}
+
+// ---------- input ----------
+const pointer={x:vw/2,y:vh/2};
+function screenToWorld(x,y){ const z=S.cam.z; return {x:(x-vw/2)/z+S.cam.x, y:(y-vh/2)/z+S.cam.y}; }
+function setPointer(e){ const b=cv.getBoundingClientRect(); pointer.x=e.clientX-b.left; pointer.y=e.clientY-b.top; }
+cv.addEventListener('pointermove',setPointer);
+cv.addEventListener('pointerdown',e=>{setPointer(e); if(e.button===2 && playing()) INP[ME].fi++;});
+const typing = e => e.target && (e.target.tagName==='INPUT' || e.target.tagName==='TEXTAREA');
+// モード選択
+const modeBtns=[...document.querySelectorAll('.mode')];
+function setMode(m){ selMode=m; modeBtns.forEach(b=>b.setAttribute('aria-pressed',String(b.dataset.mode===m))); }
+modeBtns.forEach(b=>b.addEventListener('click',()=>setMode(b.dataset.mode)));
+addEventListener('keydown',e=>{ if(typing(e)) return; const m={Digit1:'atk',Digit2:'def',Digit3:'grow'}[e.code]; if(m) setMode(m); });
+cv.addEventListener('contextmenu',e=>e.preventDefault());
+let shiftHeld=false, btnFuse=false;
+addEventListener('keydown',e=>{
+  if(typing(e)) return;
+  if(e.code==='Space'){ e.preventDefault(); if(playing()) INP[ME].sp++; }
+  if(e.key==='Shift'||e.code==='KeyE'){ shiftHeld=true; }
+  if(e.code==='KeyF'){ if(playing()) INP[ME].fi++; }
+  if(e.code==='Enter' && !playing() && !(S.watch && !S.over) && !S.net && !NET.inLobby && !NET.inRoom) startGame();
+});
+addEventListener('keyup',e=>{ if(e.key==='Shift'||e.code==='KeyE') shiftHeld=false; });
+addEventListener('blur',()=>{shiftHeld=false;btnFuse=false;});
+const bSplit=document.getElementById('b-split'), bFuse=document.getElementById('b-fuse');
+bSplit.addEventListener('pointerdown',e=>{e.preventDefault(); if(playing()) INP[ME].sp++;});
+document.getElementById('b-fire').addEventListener('pointerdown',e=>{e.preventDefault(); if(playing()) INP[ME].fi++;});
+bFuse.addEventListener('pointerdown',e=>{e.preventDefault(); btnFuse=true; bFuse.classList.add('on');});
+['pointerup','pointercancel','pointerleave'].forEach(t=>bFuse.addEventListener(t,()=>{btnFuse=false;bFuse.classList.remove('on');}));
+const playing = () => S && !S.demo && !S.over && ME>=0;
+
+// ---------- toast ----------
+const toastEl=document.getElementById('toast'); let toastT=0;
+function toast(msg){ toastEl.textContent=msg; toastEl.classList.add('show'); toastT=2.2; }
+// 陣営 f を操作している人へ知らせる（この画面ならその場で、オンラインの参加者には送る）
+function notify(f,msg){
+  if(f===ME) toast(msg);
+  else if(S.net==='host') netEmit('ev',{g:NET.g,to:f,msg});
+}
+
+// ---------- update ----------
+function update(dt){
+  S.t+=dt; if(!S.demo || S.watch) S.time-=dt;
+  // この画面の操作を自分の陣営の入力欄へ。ホストは参加者の操作も読み込む
+  const mw=screenToWorld(pointer.x,pointer.y);
+  if(ME>=0 && !S.demo){ const I=INP[ME]; I.x=mw.x; I.y=mw.y; I.fu=shiftHeld||btnFuse; I.m=selMode; }
+  if(S.net==='host') readRemoteInputs();
+  counts=[0,0,0,0]; for(const c of cells) counts[c.f]++;
+  cellGrid=buildGrid(cells); foodGrid=buildGrid(foods);
+
+  // 各陣営の元祖細胞（操作役）。失われたら、その陣営で一番大きい細胞が引き継ぐ
+  S.leaders=[null,null,null,null];
+  for(const c of cells) if(c.leader){ if(S.leaders[c.f]) c.leader=false; else S.leaders[c.f]=c; }
+  for(let f=0;f<FACTIONS.length;f++){
+    if(S.leaders[f]) continue;
+    let b=null; for(const c of cells) if(c.f===f && (!b || c.mass>b.mass)) b=c;
+    if(b){ b.leader=true; S.leaders[f]=b; if(human(f)) notify(f,'操作する細胞が引き継がれた'); }
+  }
+
+  // 抗生物質
+  if(USE_ANTIBIOTIC) S.nextZone-=dt;
+  if(S.nextZone<=0){
+    S.nextZone=rand(14,22);
+    let x,y;
+    const lead=S.mass.indexOf(Math.max(...S.mass)), lc=centroid(lead);
+    if(lc && Math.random()<.5){ x=lc.x+rand(-200,200); y=lc.y+rand(-200,200); const d=Math.hypot(x,y); if(d>DISH_R-200){x*=(DISH_R-200)/d;y*=(DISH_R-200)/d;} }
+    else [x,y]=randInDish(220);
+    zones.push({x,y,r:rand(240,360),t:0});
+    if(!S.demo) toast('抗生物質の投与を検知');
+  }
+  for(const z of zones){
+    z.t+=dt;
+    if(z.t>3 && z.t<10){
+      query(cellGrid,z.x,z.y,z.r+50,c=>{
+        if(c.dead) return;
+        if(Math.hypot(c.x-z.x,c.y-z.y)<z.r){ const res=Math.max(.1,1-c.pl.length*.1); c.mass-=(c.mass*.22*dt+2*dt)*res; if(c.mass<6) kill(c); }
+      });
+    }
+  }
+  zones=zones.filter(z=>z.t<10.6);
+
+  // 分裂・発射は人が操作する元祖細胞だけが、押された回数が増えたときに行う
+  for(let f=0;f<FACTIONS.length;f++){
+    if(!human(f)) continue;
+    const I=INP[f], L=S.leaders[f], seen=SEEN[f];
+    if(I.sp>seen.sp){ seen.sp=I.sp; if(L) divide(L,I.x-L.x,I.y-L.y,640); }
+    if(I.fi>seen.fi){
+      seen.fi=I.fi;
+      if(L && L.fireCd<=0){
+        if(canFire(L)) fire(L,I.x-L.x,I.y-L.y);
+        else notify(f, ownCount(L) ? '今撃つと乗っ取られるので撃てない' : '撃てるプラスミドがない');
+      }
+    }
+  }
+  const L0=ME>=0 ? S.leaders[ME] : null;
+
+  const n=cells.length;
+  for(let i=0;i<n;i++){
+    const c=cells[i]; if(c.dead) continue;
+    c.splitCd-=dt; c.fuseCd-=dt; c.fireCd-=dt; c.pop=Math.min(1,c.pop+dt*4);
+    if(c.leader && human(c.f)) followMouse(c,INP[c.f]);
+    else if(c.leader) steerAI(c,dt);
+    else steerMode(c,dt);
+    // 大きいほど遅い：小さい細胞（質量20以下）を1として、質量150以上で0.8倍
+    const sp=SPEED*aiK(c)*(1-.2*Math.max(0,Math.min(1,(c.mass-20)/130)));
+    const k=Math.min(1,dt*5);
+    c.vx+=(c.dx*sp-c.vx)*k; c.vy+=(c.dy*sp-c.vy)*k;
+    c.x+=(c.vx+c.ix)*dt; c.y+=(c.vy+c.iy)*dt;
+    const dec=Math.exp(-dt*3); c.ix*=dec; c.iy*=dec;
+    const d=Math.hypot(c.x,c.y), lim=DISH_R-c.r;
+    if(d>lim){ c.x*=lim/d; c.y*=lim/d; }
+    // 代謝：大きいほど消耗する
+    c.mass-=(.22+(c.mass>40?c.mass*.006:0))*dt;
+    if(c.mass<6){ kill(c); continue; }
+    // プラスミドは自分では増えない。増えるのは外からの補充（漂うプラスミドを拾う・撃ち込まれる・防御モードから渡される）だけ
+    // 縮んで容量を超えたら、あふれた環を外へ放出する（境目で揺れないよう少し余裕を持たせる）
+    while(c.pl.length>capOf(c.mass+5)){
+      const q=c.pl.splice(Math.floor(Math.random()*c.pl.length),1)[0], a=Math.random()*TAU;
+      dnas.push({x:c.x+Math.cos(a)*c.r,y:c.y+Math.sin(a)*c.r,vx:Math.cos(a)*120,vy:Math.sin(a)*120,alive:true,f:q,ttl:12,ph:Math.random()*TAU,respawn:0});
+      checkConvert(c);
+    }
+    // 9個そろったら分裂
+    if(c.pl.length>=P_MAX && c.splitCd<=0) divide(c,Math.cos(c.axis),Math.sin(c.axis),260,true);
+    c.r=rad(c.mass);
+  }
+
+  // 養分の摂取
+  for(const c of cells){
+    if(c.dead) continue;
+    query(foodGrid,c.x,c.y,c.r+4,fd=>{
+      if(fd.alive && (fd.x-c.x)**2+(fd.y-c.y)**2<c.r*c.r){ fd.alive=false; fd.respawn=rand(2,8); c.mass+=fd.v; }
+    });
+  }
+  // 浮遊プラスミドの取り込み
+  // 発射されたプラスミド：他陣営の細胞に当たると入り込む。外れたら色つきのまま漂う
+  for(const s of shots){
+    s.x+=s.vx*dt; s.y+=s.vy*dt; s.life-=dt;
+    // 他の色の保護区には入れず、跳ね返される
+    const sz=S.sanct;
+    if(sz && sz.owner>=0 && s.f!==sz.owner && pushOut(sz,s,6,1)) burst(s.x,s.y,FACTIONS[sz.owner].color,2,40);
+    const d=Math.hypot(s.x,s.y);
+    if(d>DISH_R-8){ s.life=0; s.x*=(DISH_R-8)/d; s.y*=(DISH_R-8)/d; }
+    query(cellGrid,s.x,s.y,90,o=>{
+      if(s.life<=0 || o.dead || o.id===s.from) return;
+      if(o.f===s.f){
+        // 味方に当たったとき：外来のプラスミドがあれば1つ自分の色に戻して治す。なければすり抜ける
+        if(Math.hypot(o.x-s.x,o.y-s.y)<o.r){
+          const fi=o.pl.findIndex(q=>q!==o.f);
+          if(fi>=0){ o.pl[fi]=o.f; s.life=-1; s.hit=true; o.pop=Math.min(o.pop,.85); burst(s.x,s.y,C.dna,4,50); checkConvert(o); }
+        }
+        return;
+      }
+      if(Math.hypot(o.x-s.x,o.y-s.y)<o.r){
+        if(o.pl.length<capOf(o.mass)) o.pl.push(s.f);
+        else { const i=o.pl.indexOf(o.f); if(i>=0) o.pl[i]=s.f; }
+        s.life=-1; s.hit=true; o.pop=Math.min(o.pop,.85);
+        burst(s.x,s.y,FACTIONS[s.f].color,3,40);
+        checkConvert(o);
+      }
+    });
+    if(s.life<=0 && !s.hit) dnas.push({x:s.x,y:s.y,vx:s.vx*.3,vy:s.vy*.3,alive:true,f:s.f,ttl:12,ph:Math.random()*TAU,respawn:0});
+  }
+  shots=shots.filter(s=>s.life>0);
+
+  // 浮遊プラスミド：白は拾った細胞の色になる。色つきはその色のまま入る
+  for(const dn of dnas){
+    if(dn.f>=0){
+      const k=Math.exp(-dt*2); dn.x+=dn.vx*dt; dn.y+=dn.vy*dt; dn.vx*=k; dn.vy*=k;
+      dn.ttl-=dt; if(dn.ttl<=0) dn.alive=false;
+    }
+    if(!dn.alive){
+      if(dn.f<0){
+        dn.respawn-=dt;
+        if(dn.respawn<=0){
+          if(dn.zid){ const z=S.sanct; if(!z || z.id!==dn.zid){ dn.gone=true; continue; } dn.x=z.x+rand(20,z.s-20); dn.y=z.y+rand(20,z.s-20); }
+          else { const [x,y]=randInDish(40); dn.x=x; dn.y=y; }
+          dn.alive=true;
+        }
+      }
+      continue;
+    }
+    query(cellGrid,dn.x,dn.y,90,c=>{
+      if(dn.alive && !c.dead && canTake(c,dn) && Math.hypot(c.x-dn.x,c.y-dn.y)<c.r){
+        dn.alive=false; dn.respawn=rand(4,10); c.pop=Math.min(c.pop,.8);
+        // 自分の色になるプラスミドなら、外来のプラスミドを優先して置き換えて治す。外来がなければ空き枠に入る
+        const q=dn.f<0?c.f:dn.f, fi=q===c.f ? c.pl.findIndex(p=>p!==c.f) : -1;
+        if(fi>=0) c.pl[fi]=q; else c.pl.push(q);
+        if(c.f===ME && !S.demo && dn.f<0) S.dnaGot++;
+        checkConvert(c);
+      }
+    });
+  }
+  // 保護区の上乗せ分は、保護区が消えたら一緒に消す
+  const zs=S.sanct;
+  dnas=dnas.filter(dn=>!dn.gone && (dn.alive||dn.f<0) && !(dn.zid && (!zs || zs.id!==dn.zid) && !dn.alive));
+  for(const fd of foods){
+    if(fd.alive) continue;
+    fd.respawn-=dt;
+    if(fd.respawn<=0){
+      if(fd.zid){ if(!zs || zs.id!==fd.zid){ fd.gone=true; continue; } fd.x=zs.x+rand(10,zs.s-10); fd.y=zs.y+rand(10,zs.s-10); fd.respawn=0; }
+      else { const [x,y]=randInDish(20); fd.x=x; fd.y=y; }
+      fd.v=rand(1,2.4); fd.alive=true;
+    }
+  }
+  if(!zs) foods=foods.filter(fd=>!fd.zid || (fd.alive && !fd.gone));
+  else foods=foods.filter(fd=>!fd.gone);
+
+  // 防御モード：触れている味方へ自分の色のプラスミドを渡す（外来があればそれと入れ替えて治す）
+  for(const c of cells){
+    if(c.dead || c.leader || c.mode!=='def' || !c.ally) continue;
+    c.giveCd-=dt;
+    const o=c.ally;
+    if(o.dead || o.f!==c.f){ c.ally=null; continue; }
+    if(c.giveCd>0 || Math.hypot(o.x-c.x,o.y-c.y)>c.r+o.r+24 || ownCount(c)<2) continue;
+    const fi=o.pl.findIndex(q=>q!==o.f);
+    if(fi<0 && o.pl.length>=capOf(o.mass)){ c.ally=null; continue; }
+    c.pl.splice(c.pl.lastIndexOf(c.f),1);
+    if(fi>=0) o.pl[fi]=o.f; else o.pl.push(o.f);
+    c.giveCd=.6; o.pop=Math.min(o.pop,.85);
+    burst((c.x+o.x)/2,(c.y+o.y)/2,C.dna,3,40);
+    checkConvert(c); checkConvert(o);
+  }
+
+  // 細胞同士：押し合い・融合（他陣営とも押し合うだけで、食べることはできない）
+  for(const c of cells){
+    if(c.dead) continue;
+    query(cellGrid,c.x,c.y,c.r+60,o=>{
+      if(o===c||o.dead||c.dead) return;
+      const dx=o.x-c.x, dy=o.y-c.y, d=Math.hypot(dx,dy);
+      if(o.f===c.f && human(c.f) && INP[c.f].fu){
+        if(c.fuseCd<=0 && o.fuseCd<=0 && c.mass>=o.mass && d<c.r*.75) merge(c,o);
+      } else if(d<c.r+o.r && d>.01){
+        const ov=(c.r+o.r-d)*(o.f===c.f?.25:.4), ux=dx/d, uy=dy/d;
+        const wc=o.mass/(c.mass+o.mass), wo=1-wc;
+        c.x-=ux*ov*wc*2; c.y-=uy*ov*wc*2; o.x+=ux*ov*wo*2; o.y+=uy*ov*wo*2;
+      }
+    });
+  }
+
+  // 保護区：確保した色以外の細胞と、色つきの漂うプラスミドを外へ出す
+  sanctTick(dt);
+  const sz=S.sanct;
+  if(sz && sz.owner>=0){
+    for(const c of cells) if(!c.dead && c.f!==sz.owner) pushOut(sz,c,c.r,.3);
+    for(const dn of dnas) if(dn.alive && dn.f>=0 && dn.f!==sz.owner) pushOut(sz,dn,8,.5);
+  }
+
+  for(const p of parts){ p.x+=p.vx*dt; p.y+=p.vy*dt; p.vx*=.94; p.vy*=.94; p.life-=dt; }
+  parts=parts.filter(p=>p.life>0);
+  cells=cells.filter(c=>!c.dead);
+
+  S.mass=[0,0,0,0]; counts=[0,0,0,0];
+  for(const c of cells){ S.mass[c.f]+=c.mass; counts[c.f]++; }
+  if(!S.demo && ME>=0) S.peak=Math.max(S.peak,counts[ME]);
+  FACTIONS.forEach((f,i)=>{
+    if(!S.out[i] && counts[i]===0){
+      S.out[i]=true;
+      if(i===ME && S.net) toast('あなたの株は全滅した。このまま観戦できます');
+      else if((!S.demo && i!==ME) || S.watch) toast(f.name+'が全滅');
+    }
+  });
+
+  // デモ中に全滅した陣営は再接種（観戦では再接種しない）
+  if(S.demo && !S.watch){
+    FACTIONS.forEach((f,i)=>{ if(counts[i]===0){ S.out[i]=false; const [x,y]=randInDish(300); addCell(i,x,y,40); } });
+  }
+
+  // カメラ
+  const FL=S.watch && S.follow>=0 ? S.leaders[S.follow] : null;
+  if(FL){
+    // 観戦：選んだ陣営の元祖細胞を追う
+    const k=Math.min(1,dt*3), zt=.6;
+    S.cam.x+=(FL.x-S.cam.x)*k; S.cam.y+=(FL.y-S.cam.y)*k; S.cam.z+=(zt-S.cam.z)*Math.min(1,dt*1.5);
+  } else if(S.demo){
+    S.cam.x+=(0-S.cam.x)*dt; S.cam.y+=(0-S.cam.y)*dt;
+    const zt=Math.min(vw,vh)/(DISH_R*2.1); S.cam.z+=(zt-S.cam.z)*dt*2;
+  } else if(!L0){
+    // 自分の株がない（全滅・観戦）ときはシャーレ全体を見る
+    S.cam.x+=(0-S.cam.x)*dt; S.cam.y+=(0-S.cam.y)*dt;
+    const zt=Math.min(vw,vh)/(DISH_R*2.1); S.cam.z+=(zt-S.cam.z)*dt*2;
+  } else {
+    // カメラは操作中の元祖細胞を追う
+    const zt=Math.max(.35,Math.min(1.2,Math.min(vw,vh)/(L0.r*14+460)));
+    const k=Math.min(1,dt*3);
+    S.cam.x+=(L0.x-S.cam.x)*k; S.cam.y+=(L0.y-S.cam.y)*k; S.cam.z+=(zt-S.cam.z)*Math.min(1,dt*1.5);
+  }
+
+  if(S.net==='host'){
+    // オンライン：最後の1陣営になるか、時間切れで終わる（自分の株が全滅してもホストは動かし続ける）
+    if(counts.filter(n=>n>0).length<=1) endGame('net-sweep');
+    else if(S.time<=0) endGame('net');
+  } else if(!S.demo){
+    const othersAlive=[1,2,3].some(i=>counts[i]>0);
+    if(counts[0]===0) endGame('lost');
+    else if(!othersAlive) endGame('sweep');
+    else if(S.time<=0) endGame('time');
+  } else if(S.watch){
+    if(counts.filter(n=>n>0).length<=1) endGame('watch-sweep');
+    else if(S.time<=0) endGame('watch');
+  }
+}
+
+// ---------- render ----------
+// ---------- 戦場の霧 ----------
+// 自分の細胞の周り（元祖細胞は広め）だけが見える。霧の外の敵の細胞・敵の弾・色つきのプラスミドは描かない。
+// 養分と白いプラスミド、保護区はいつでも見える。全体マップは一度でも見た場所だけが明るくなる。
+// 自分の株が全滅したとき、観戦中、タイトル背景では霧を出さない
+const VIS_R=480, VIS_LEADER=680, FOG_N=48, FOG_C=DISH_R*2/FOG_N;
+let explored=new Uint8Array(FOG_N*FOG_N), mine=[], fogTick=0;
+const fogOn=()=>!S.demo && ME>=0 && mine.length>0;
+const visR=c=>(c.leader?VIS_LEADER:VIS_R)+c.r;
+function seen(x,y,pad=0){
+  if(!fogOn()) return true;
+  for(const c of mine){ const R=visR(c)+pad, dx=x-c.x, dy=y-c.y; if(dx*dx+dy*dy<R*R) return true; }
+  return false;
+}
+function updateVision(){
+  mine=ME>=0 ? cells.filter(c=>c.f===ME) : [];
+  if(!fogOn() || (fogTick++)%6) return;
+  for(const c of mine){
+    const R=visR(c), x0=Math.max(0,Math.floor((c.x-R+DISH_R)/FOG_C)), x1=Math.min(FOG_N-1,Math.floor((c.x+R+DISH_R)/FOG_C));
+    const y0=Math.max(0,Math.floor((c.y-R+DISH_R)/FOG_C)), y1=Math.min(FOG_N-1,Math.floor((c.y+R+DISH_R)/FOG_C));
+    for(let gy=y0;gy<=y1;gy++) for(let gx=x0;gx<=x1;gx++){
+      const cx=(gx+.5)*FOG_C-DISH_R, cy=(gy+.5)*FOG_C-DISH_R;
+      if((cx-c.x)**2+(cy-c.y)**2<R*R) explored[gx+gy*FOG_N]=1;
+    }
+  }
+}
+// 画面の霧：暗い幕を張り、自分の細胞の周りを丸くくり抜く。
+// 霧の縁はぼかしているので、画面の1/4の細かさで描いて引き伸ばす（ピクセル数が1/16になる）
+const fogCv=document.createElement('canvas'), fctx=fogCv.getContext('2d'), FOG_SCALE=.25;
+function drawFog(z){
+  const fw=Math.max(1,Math.round(vw*FOG_SCALE)), fh=Math.max(1,Math.round(vh*FOG_SCALE));
+  if(fogCv.width!==fw || fogCv.height!==fh){ fogCv.width=fw; fogCv.height=fh; }
+  fctx.setTransform(FOG_SCALE,0,0,FOG_SCALE,0,0);
+  fctx.globalCompositeOperation='source-over';
+  fctx.clearRect(0,0,vw,vh);
+  fctx.fillStyle=C.fog; fctx.fillRect(0,0,vw,vh);
+  fctx.globalCompositeOperation='destination-out';
+  for(const c of mine){
+    const sx=(c.x-S.cam.x)*z+vw/2, sy=(c.y-S.cam.y)*z+vh/2, R=visR(c)*z;
+    if(sx<-R || sx>vw+R || sy<-R || sy>vh+R) continue;
+    const g=fctx.createRadialGradient(sx,sy,R*.7,sx,sy,R);
+    g.addColorStop(0,'rgba(0,0,0,1)'); g.addColorStop(1,'rgba(0,0,0,0)');
+    fctx.fillStyle=g; fctx.beginPath(); fctx.arc(sx,sy,R,0,TAU); fctx.fill();
+  }
+  fctx.globalCompositeOperation='source-over';
+  ctx.imageSmoothingEnabled=true;
+  ctx.drawImage(fogCv,0,0,vw,vh);
+}
+
+function render(){
+  updateVision();
+  const z=S.cam.z;
+  ctx.setTransform(dpr,0,0,dpr,0,0);
+  ctx.fillStyle=C.bg; ctx.fillRect(0,0,vw,vh);
+  ctx.setTransform(dpr*z,0,0,dpr*z,dpr*(vw/2-S.cam.x*z),dpr*(vh/2-S.cam.y*z));
+  const L=S.cam.x-vw/2/z-60, R=S.cam.x+vw/2/z+60, T=S.cam.y-vh/2/z-60, B=S.cam.y+vh/2/z+60;
+  const vis=(x,y,r)=>x+r>L&&x-r<R&&y+r>T&&y-r<B;
+
+  // シャーレ
+  ctx.fillStyle=C.dish; ctx.beginPath(); ctx.arc(0,0,DISH_R,0,TAU); ctx.fill();
+  ctx.save(); ctx.beginPath(); ctx.arc(0,0,DISH_R,0,TAU); ctx.clip();
+  // 計算盤（血球計算盤）風のグリッド
+  const step=100;
+  ctx.lineWidth=1/z;
+  ctx.strokeStyle=C.grid; ctx.beginPath();
+  for(let x=Math.floor(L/step)*step;x<R;x+=step){ ctx.moveTo(x,T); ctx.lineTo(x,B); }
+  for(let y=Math.floor(T/step)*step;y<B;y+=step){ ctx.moveTo(L,y); ctx.lineTo(R,y); }
+  ctx.stroke();
+  ctx.strokeStyle=C.gridS; ctx.beginPath();
+  for(let x=Math.floor(L/400)*400;x<R;x+=400){ for(const o of [-6,0,6]){ ctx.moveTo(x+o,T); ctx.lineTo(x+o,B); } }
+  for(let y=Math.floor(T/400)*400;y<B;y+=400){ for(const o of [-6,0,6]){ ctx.moveTo(L,y+o); ctx.lineTo(R,y+o); } }
+  ctx.stroke();
+  ctx.restore();
+  ctx.strokeStyle=C.rim; ctx.lineWidth=16; ctx.beginPath(); ctx.arc(0,0,DISH_R+8,0,TAU); ctx.stroke();
+
+  // 抗生物質
+  for(const zn of zones){
+    if(!vis(zn.x,zn.y,zn.r)) continue;
+    const active=zn.t>3, fade=Math.min(1,(10.6-zn.t)/.6);
+    ctx.save(); ctx.globalAlpha=fade;
+    if(active){
+      ctx.fillStyle='rgba(255,77,94,.13)'; ctx.beginPath(); ctx.arc(zn.x,zn.y,zn.r,0,TAU); ctx.fill();
+    }
+    ctx.strokeStyle=C.warn; ctx.lineWidth=active?4:3;
+    ctx.setLineDash(active?[]:[18,14]); ctx.lineDashOffset=-S.t*40;
+    ctx.globalAlpha=fade*(active?.9:.5+.5*Math.sin(S.t*10));
+    ctx.beginPath(); ctx.arc(zn.x,zn.y,zn.r,0,TAU); ctx.stroke();
+    ctx.setLineDash([]);
+    if(!active){ ctx.fillStyle=C.warn; ctx.font=`bold ${Math.max(22,18/z)}px ${tok('--f-data')}`; ctx.textAlign='center'; ctx.fillText(Math.ceil(3-zn.t)+'', zn.x, zn.y+8); }
+    ctx.restore();
+  }
+
+  // 養分
+  // 1つのパスにまとめて1回で塗る
+  ctx.fillStyle=C.food; ctx.globalAlpha=.75; ctx.beginPath();
+  for(const fd of foods){
+    if(!fd.alive||!vis(fd.x,fd.y,8)) continue;
+    const r=2+fd.v*1.4+Math.sin(S.t*2+fd.ph)*.5;
+    ctx.moveTo(fd.x+r,fd.y); ctx.arc(fd.x,fd.y,r,0,TAU);
+  }
+  ctx.fill(); ctx.globalAlpha=1;
+  // 保護区：未確保は白い点線、確保されたらその色で塗る。残り秒数を角に出す
+  const sz=S.sanct;
+  if(sz && vis(sz.x+sz.s/2,sz.y+sz.s/2,sz.s)){
+    const own=sz.owner>=0, col=own?FACTIONS[sz.owner].color:C.ink, fade=Math.min(1,sz.t/1.5);
+    ctx.save();
+    if(own){ ctx.globalAlpha=fade*.12; ctx.fillStyle=col; ctx.fillRect(sz.x,sz.y,sz.s,sz.s); }
+    ctx.globalAlpha=fade; ctx.strokeStyle=col; ctx.lineWidth=Math.max(3,2.5/z);
+    ctx.setLineDash(own?[]:[20,14]); ctx.lineDashOffset=-S.t*30;
+    ctx.strokeRect(sz.x,sz.y,sz.s,sz.s); ctx.setLineDash([]);
+    ctx.fillStyle=col; ctx.font=`700 ${Math.max(16,14/z)}px ${tok('--f-body')}`; ctx.textAlign='left'; ctx.textBaseline='top';
+    ctx.fillText(`保護区 ${Math.ceil(sz.t)}`+(own?'':'　入った色だけが使える'), sz.x+10, sz.y+10);
+    ctx.textBaseline='alphabetic';
+    ctx.restore();
+  }
+
+  // 浮遊プラスミド
+  ctx.strokeStyle=C.dna; ctx.lineWidth=2.2;
+  for(const dn of dnas){
+    if(!dn.alive||!vis(dn.x,dn.y,20)||(dn.f>=0 && dn.f!==ME && !seen(dn.x,dn.y))) continue;
+    const col=dn.f<0?C.dna:FACTIONS[dn.f].color, s=1+Math.sin(S.t*3+dn.ph)*.12;
+    ctx.globalAlpha=dn.f<0?1:Math.min(1,dn.ttl/2);
+    drawPlasmid(dn.x,dn.y,9*s,col,2.2);
+    ctx.globalAlpha*=.3; ctx.strokeStyle=col; ctx.lineWidth=2;
+    ctx.beginPath(); ctx.arc(dn.x,dn.y,17*s,0,TAU); ctx.stroke();
+  }
+  ctx.globalAlpha=1;
+
+  // 細胞
+  // 飛んでいるプラスミド
+  for(const s of shots){
+    if(s.f!==ME && !seen(s.x,s.y)) continue;
+    const col=FACTIONS[s.f].color;
+    ctx.strokeStyle=col; ctx.globalAlpha=.35; ctx.lineWidth=3;
+    ctx.beginPath(); ctx.moveTo(s.x,s.y); ctx.lineTo(s.x-s.vx*.05,s.y-s.vy*.05); ctx.stroke();
+    ctx.globalAlpha=1; drawPlasmid(s.x,s.y,7,col,2.2);
+  }
+
+  const sorted=cells.filter(c=>vis(c.x,c.y,c.r*1.4) && (c.f===ME || seen(c.x,c.y,c.r))).sort((a,b)=>a.mass-b.mass);
+  for(const c of sorted) drawCell(c,z);
+
+  // 粒子
+  for(const p of parts){ if(!seen(p.x,p.y)) continue; ctx.globalAlpha=Math.max(0,p.life/p.max); ctx.fillStyle=p.color; ctx.beginPath(); ctx.arc(p.x,p.y,3,0,TAU); ctx.fill(); }
+  ctx.globalAlpha=1;
+
+  // 画面空間
+  ctx.setTransform(dpr,0,0,dpr,0,0);
+  if(fogOn()) drawFog(z);
+  ctx.drawImage(vigCv,0,0,vw,vh);
+  if(!S.demo) drawScaleBar(z);
+  // 全体マップは小さいので、3フレームに1回（約20回/秒）で十分
+  if((mapTick++)%3===0) drawMap();
+}
+let mapTick=0;
+
+function drawCell(c,z){
+  const f=FACTIONS[c.f];
+  const pop=c.pop<1 ? .55+.45*easeOutBack(c.pop) : 1;
+  const r=c.r*pop;
+  const prog=capOf(c.mass)===P_MAX && c.pl.length>=7 ? (c.pl.length-6)/3 : 0;
+  ctx.save();
+  ctx.translate(c.x,c.y); ctx.rotate(c.axis);
+  ctx.scale(1+prog*.28,1-prog*.12);
+  ctx.beginPath();
+  // 画面上で小さい細胞ほど膜の頂点を減らす
+  const sr=r*z, n=sr<12 ? 10 : sr<30 ? 16 : 22;
+  for(let i=0;i<=n;i++){
+    const a=i/n*TAU;
+    const w=1+.05*Math.sin(a*3+S.t*2.2+c.seed)+.03*Math.sin(a*5-S.t*3+c.seed*2);
+    const px=Math.cos(a)*r*w, py=Math.sin(a)*r*w;
+    i?ctx.lineTo(px,py):ctx.moveTo(px,py);
+  }
+  ctx.closePath();
+  ctx.globalAlpha=.28; ctx.fillStyle=f.color; ctx.fill();
+  ctx.globalAlpha=1; ctx.lineWidth=Math.max(1.6/z,r*.09); ctx.strokeStyle=f.color; ctx.stroke();
+  // 分裂間近の隔壁
+  if(prog>0){
+    ctx.globalAlpha=prog*.8; ctx.lineWidth=Math.max(1/z,r*.05);
+    ctx.beginPath(); ctx.moveTo(0,-r*.9); ctx.lineTo(0,r*.9); ctx.stroke();
+  }
+  ctx.restore();
+  // プラスミド：容量ぶんの枠を並べ、自分の色は白、外来はその陣営の色。空き枠は薄い枠だけ
+  // 細胞の回転・伸びとは切り離して描き、ハートが常に正立するようにする
+  if(sr>6 && sr<18){
+    // 小さく映るときは、ハートを省いて色つきの小さな四角だけにする（描画回数を大きく減らす）
+    const ring=r*.5, h=Math.max(r*.13,1.4/z);
+    for(let k=0;k<c.pl.length;k++){
+      const a=k/Math.max(3,c.pl.length)*TAU+S.t*.4+c.seed, q=c.pl[k];
+      ctx.globalAlpha=1; ctx.fillStyle=q===c.f?C.dna:FACTIONS[q].color;
+      ctx.fillRect(c.x+Math.cos(a)*ring-h, c.y+Math.sin(a)*ring-h, h*2, h*2);
+    }
+  } else if(sr>=18){
+    const cap=capOf(c.mass), slots=Math.max(cap,c.pl.length);
+    const h=Math.max(r*.12,2.2/z), ring=r*(slots<=3?.42:.58), lw=Math.max(1.1/z,r*.035);
+    for(let k=0;k<slots;k++){
+      const a=k/slots*TAU+S.t*.4+c.seed, px=c.x+Math.cos(a)*ring, py=c.y+Math.sin(a)*ring;
+      if(k<c.pl.length){
+        const q=c.pl[k];
+        ctx.globalAlpha=1; drawPlasmid(px,py,h,q===c.f?C.dna:FACTIONS[q].color,lw);
+      } else {
+        ctx.globalAlpha=.3; plasmidFrame(px,py,h); ctx.strokeStyle=f.color; ctx.lineWidth=lw; ctx.stroke();
+      }
+    }
+  }
+  if(c.leader){
+    // 元祖細胞：外側を回る点線の輪（プレイヤーのものははっきり、AIは薄く）
+    ctx.globalAlpha=c.f===ME && !S.demo ? .9 : .45; ctx.strokeStyle=C.ink; ctx.lineWidth=Math.max(1.5/z,r*.04);
+    ctx.setLineDash([r*.3,r*.2]); ctx.lineDashOffset=-S.t*r*.4;
+    ctx.beginPath(); ctx.arc(c.x,c.y,r*1.2,0,TAU); ctx.stroke();
+    ctx.setLineDash([]); ctx.lineDashOffset=0;
+  } else if(r*z>8){
+    // 子細胞：中心にモードの印
+    ctx.globalAlpha=c.f===ME ? .95 : .6; ctx.fillStyle=C.ink; modeGlyph(ctx,c.mode,c.x,c.y,Math.max(3/z,r*.17));
+  }
+  // オンライン対戦の名前：元祖細胞は名前、分裂で生まれた細胞は名前＋番号
+  const nm=NAMES[c.f];
+  if(nm && r*z>7){
+    ctx.globalAlpha=c.f===ME ? .95 : .75; ctx.fillStyle=C.ink;
+    ctx.font=`${c.leader?700:400} ${(c.leader?13:11)/z}px ${tok('--f-body')}`; ctx.textAlign='center'; ctx.textBaseline='top';
+    ctx.fillText(c.leader ? nm : nm+c.no, c.x, c.y+r*1.25+3/z);
+    ctx.textBaseline='alphabetic';
+  }
+  ctx.globalAlpha=1;
+}
+// モードの印：攻撃＝三角、防御＝盾、増殖＝十字（パネルのアイコンと同じ形）
+function modeGlyph(g,m,x,y,s){
+  g.beginPath();
+  if(m==='atk'){ g.moveTo(x,y-s); g.lineTo(x+s*.87,y+s*.5); g.lineTo(x-s*.87,y+s*.5); }
+  else if(m==='def'){ g.moveTo(x-s*.8,y-s*.85); g.lineTo(x+s*.8,y-s*.85); g.lineTo(x+s*.8,y); g.quadraticCurveTo(x+s*.65,y+s*.7,x,y+s); g.quadraticCurveTo(x-s*.65,y+s*.7,x-s*.8,y); }
+  else { const t=s*.25; g.moveTo(x-t,y-s); g.lineTo(x+t,y-s); g.lineTo(x+t,y-t); g.lineTo(x+s,y-t); g.lineTo(x+s,y+t); g.lineTo(x+t,y+t); g.lineTo(x+t,y+s); g.lineTo(x-t,y+s); g.lineTo(x-t,y+t); g.lineTo(x-s,y+t); g.lineTo(x-s,y-t); g.lineTo(x-t,y-t); }
+  g.closePath(); g.fill();
+}
+// プラスミドの形：角丸の四角（半径 h の正方形）の中にハート
+function plasmidFrame(x,y,h){
+  const r=h*.42;
+  ctx.beginPath();
+  ctx.moveTo(x-h+r,y-h);
+  ctx.arcTo(x+h,y-h,x+h,y+h,r); ctx.arcTo(x+h,y+h,x-h,y+h,r);
+  ctx.arcTo(x-h,y+h,x-h,y-h,r); ctx.arcTo(x-h,y-h,x+h,y-h,r);
+  ctx.closePath();
+}
+function drawPlasmid(x,y,h,color,lw){
+  plasmidFrame(x,y,h);
+  ctx.fillStyle=C.bg; ctx.fill();
+  ctx.strokeStyle=color; ctx.lineWidth=lw; ctx.stroke();
+  const s=h*1.15, hy=y+h*.08;
+  ctx.beginPath();
+  ctx.moveTo(x,hy+s*.42);
+  ctx.bezierCurveTo(x-s*.75,hy-s*.05,x-s*.38,hy-s*.62,x,hy-s*.22);
+  ctx.bezierCurveTo(x+s*.38,hy-s*.62,x+s*.75,hy-s*.05,x,hy+s*.42);
+  ctx.fillStyle=color; ctx.fill();
+}
+const easeOutBack=t=>{const s=1.7;return 1+(s+1)*Math.pow(t-1,3)+s*Math.pow(t-1,2);};
+
+// 全体マップ（右パネル）：シャーレ全体、各陣営の細胞、漂うプラスミド、今見ている範囲
+function drawMap(){
+  const g=mctx, R=mapS/2-3, sc=R/DISH_R, cx=mapS/2, cy=mapS/2;
+  g.setTransform(dpr,0,0,dpr,0,0);
+  g.fillStyle=C.side; g.fillRect(0,0,mapS,mapS);
+  g.fillStyle=C.dish; g.beginPath(); g.arc(cx,cy,R,0,TAU); g.fill();
+  g.strokeStyle=C.rim; g.lineWidth=2; g.stroke();
+  // まだ見ていない場所を暗くする
+  if(fogOn()){
+    g.save(); g.beginPath(); g.arc(cx,cy,R,0,TAU); g.clip();
+    g.fillStyle=C.fog; const cs=FOG_C*sc;
+    g.beginPath();
+    for(let gy=0;gy<FOG_N;gy++) for(let gx=0;gx<FOG_N;gx++) if(!explored[gx+gy*FOG_N]) g.rect(cx+gx*cs-R-.3,cy+gy*cs-R-.3,cs+.6,cs+.6);
+    g.fill();
+    g.restore();
+  }
+  g.fillStyle=C.dna; g.globalAlpha=.5;
+  for(const dn of dnas) if(dn.alive && (dn.f<0 || dn.f===ME || seen(dn.x,dn.y))) g.fillRect(cx+dn.x*sc-.75,cy+dn.y*sc-.75,1.5,1.5);
+  g.globalAlpha=1;
+  const sz=S.sanct;
+  if(sz){
+    const col=sz.owner>=0?FACTIONS[sz.owner].color:C.ink;
+    if(sz.owner>=0){ g.globalAlpha=.25; g.fillStyle=col; g.fillRect(cx+sz.x*sc,cy+sz.y*sc,sz.s*sc,sz.s*sc); g.globalAlpha=1; }
+    g.strokeStyle=col; g.lineWidth=1.5; g.strokeRect(cx+sz.x*sc,cy+sz.y*sc,sz.s*sc,sz.s*sc);
+  }
+  for(const c of cells){
+    if(c.f!==ME && !seen(c.x,c.y,c.r)) continue;
+    g.fillStyle=FACTIONS[c.f].color;
+    g.beginPath(); g.arc(cx+c.x*sc,cy+c.y*sc,Math.max(1.6,c.r*sc),0,TAU); g.fill();
+  }
+  if(!S.demo || S.watch){
+    const z=S.cam.z, L=S.watch ? S.leaders[S.follow] : (ME>=0 ? S.leaders[ME] : null);
+    if(L){ g.strokeStyle=C.ink; g.lineWidth=1.5; g.beginPath(); g.arc(cx+L.x*sc,cy+L.y*sc,5,0,TAU); g.stroke(); }
+    g.strokeStyle=C.ink; g.globalAlpha=.7; g.lineWidth=1;
+    g.strokeRect(cx+(S.cam.x-vw/2/z)*sc, cy+(S.cam.y-vh/2/z)*sc, vw/z*sc, vh/z*sc);
+    g.globalAlpha=1;
+  }
+}
+function drawScaleBar(z){
+  if(vw<=520 || matchMedia('(pointer:coarse)').matches) return;
+  const len=100*z, x=vw-14-len, y=vh-22;
+  ctx.strokeStyle=C.ink; ctx.lineWidth=2;
+  ctx.beginPath(); ctx.moveTo(x,y); ctx.lineTo(x+len,y); ctx.moveTo(x,y-4); ctx.lineTo(x,y+4); ctx.moveTo(x+len,y-4); ctx.lineTo(x+len,y+4); ctx.stroke();
+  ctx.fillStyle=C.dim; ctx.font=`11px ${tok('--f-data')}`; ctx.textAlign='right';
+  ctx.fillText(`10 µm  ×${Math.round(z*1000)}`, vw-14, y-8);
+}
+
+// ---------- HUD ----------
+const el=id=>document.getElementById(id);
+const frows=el('frows'), share=el('share');
+// 陣営一覧：オンラインでは操作している人の名前も出す（名前は他人の入力なので必ずエスケープ）
+function buildFrows(){
+  frows.innerHTML=FACTIONS.map((f,i)=>{
+    const who = NAMES[i] ? `：${esc(NAMES[i])}` : '';
+    const me = i===ME && !S.demo ? '（あなた）' : '';
+    return `<div class="frow" id="fr${i}"><span class="sw" style="background:${f.color}"></span><span class="nm">${f.name}${who}${me}<small id="fc${i}"></small></span><span class="val" id="fm${i}">0</span></div>`;
+  }).join('');
+}
+share.innerHTML=FACTIONS.map((f,i)=>`<span id="sh${i}" style="background:${f.color};width:25%"></span>`).join('');
+let hudT=0;
+function updateHUD(){
+  const total=S.mass.reduce((a,b)=>a+b,0)||1;
+  FACTIONS.forEach((f,i)=>{
+    el('fm'+i).textContent=Math.round(S.mass[i]);
+    el('fc'+i).textContent=counts[i]+'個';
+    el('sh'+i).style.width=(S.mass[i]/total*100)+'%';
+    el('fr'+i).classList.toggle('out',counts[i]===0);
+  });
+  const t=Math.max(0,Math.ceil(S.time));
+  el('timer').textContent=Math.floor(t/60)+':'+String(t%60).padStart(2,'0');
+  el('timer').classList.toggle('low',t<=20&&!S.demo);
+  if(ME<0) return;
+  el('s-cells').textContent=counts[ME];
+  el('s-mass').textContent=Math.round(S.mass[ME]);
+  let pl=0, fx=0; for(const c of cells) if(c.f===ME) for(const q of c.pl) q===ME?pl++:fx++;
+  el('s-pl').textContent=pl+(fx?`（外来 ${fx}）`:'');
+  const mc={atk:0,def:0,grow:0}; for(const c of cells) if(c.f===ME && !c.leader) mc[c.mode]++;
+  for(const m in mc) el('mc-'+m).textContent=mc[m];
+}
+
+// ---------- 観戦パネル ----------
+const wFollow=el('w-follow'), wSpeed=el('w-speed');
+wFollow.innerHTML=`<button type="button" data-f="-1">全体</button>`+FACTIONS.map((f,i)=>`<button type="button" data-f="${i}"><i style="background:${f.color}"></i>${f.name}</button>`).join('');
+function pressOnly(box,attr,val){ for(const b of box.querySelectorAll('button')) b.setAttribute('aria-pressed',String(b.dataset[attr]===String(val))); }
+function setFollow(f){ if(S) S.follow=f; pressOnly(wFollow,'f',f); }
+function setSpeed(s){ if(S) S.speed=s; pressOnly(wSpeed,'s',s); }
+wFollow.addEventListener('click',e=>{ const b=e.target.closest('button'); if(b) setFollow(+b.dataset.f); });
+wSpeed.addEventListener('click',e=>{ const b=e.target.closest('button'); if(b) setSpeed(+b.dataset.s); });
+el('w-quit').addEventListener('click',()=>{ newGame(true); showTitle(); });
+// 観戦中はモード選択と自分の成績を隠し、観戦の操作を出す
+function setWatchUI(on){ el('sec-watch').hidden=!on; el('sec-mode').hidden=on; el('my-stats').hidden=on; }
+
+// ---------- screens ----------
+const overlay=el('overlay'), card=el('card');
+function showTitle(){
+  card.innerHTML=`
+    <div class="eyebrow">CULTURE PLATE No.04 ／ 37°C</div>
+    <h1>培養戦線<span class="sub">COLONY WARFARE</span></h1>
+    <p class="lead">シャーレの中で4つの菌株が養分を奪い合う。どの株も細胞1つから始まる。あなたが動かすのはその元祖細胞だけ。分裂で生まれた細胞は、選んだモードに従って自分で動く。${MATCH_LABEL}後にいちばん多くのバイオマスを残した陣営が勝つ。</p>
+    <ul class="rules">
+      <li><span>移動</span><span>マウス（タッチ）の方向へ、元祖細胞（外側に点線の輪がある細胞）が泳ぐ。元祖細胞が失われると、一番大きい細胞が引き継ぐ</span></li>
+      <li><span>1 2 3 ／ モード</span><span>右のパネルで、次に生まれる細胞のモードを選ぶ。生まれた細胞はそれぞれ単独で動く。攻撃＝敵を探して撃ち、撃ち切ったら逃げて補給する（分裂しない）、防御＝防御以外の味方に付き添い、プラスミドを渡して守る、増殖＝敵を避けて養分を集め自分で増える。中心の印（▲ 盾 ＋）でモードが分かる。敵の株も同じ仕組みで動く</span></li>
+      <li><span>成長</span><span>緑の粒（養分）を取り込むと細胞が大きくなり、プラスミドの容量が 3 → 5 → 7 → 9 個と増える。縮むと、あふれたプラスミドは外へ出ていく</span></li>
+      <li><span>プラスミド</span><span>細胞の中の、ハートが入った角丸の四角（薄い枠は空き）。自分では増えない。漂う白いプラスミドを拾うか、防御モードの味方から渡されたときだけ増える。外来のプラスミドが入っているときに拾うと、外来のものから優先して治る（枠がいっぱいでも拾える）。容量9の細胞が9個そろうと、4個と5個の2細胞に分裂する</span></li>
+      <li><span>F ／ 発射</span><span>元祖細胞から、自分の色のプラスミドを1つマウスの方向へ撃ち出す。当たった敵の細胞には、あなたの色のプラスミドが入り込む。外来のプラスミドが入った味方に当てると、それを1つ治す（治すものがない味方はすり抜ける）。外れたものは色つきのまましばらく漂う</span></li>
+      <li><span>乗っ取り</span><span>細胞の中で他の色のプラスミドが自分の色より多くなると、その細胞はその陣営に寝返る。撃ち込まれた外来のプラスミドは、拾い直すか防御モードに治してもらうまで残る。色つきのものを拾うのも危険</span></li>
+      <li><span>Space ／ 分裂</span><span>元祖細胞を今すぐ分裂させ、マウスの方向へ子細胞を打ち出す（ある程度の大きさが必要）。子細胞は選んでいるモードで動き出す</span></li>
+      <li><span>戦場の霧</span><span>見えるのは自分の細胞の周りだけ（元祖細胞は少し広い）。霧の外の敵の細胞・弾・色つきのプラスミドは見えない。全体マップは一度見た場所だけが明るくなる。養分・白いプラスミド・保護区はいつでも見える</span></li>
+      <li><span>保護区</span><span>ときどき、一番弱い陣営の近くに計算盤の1マスが「保護区」として20秒だけ現れる（白い点線の正方形）。最初に入った陣営の色だけが入れ、他の色の細胞は押し出され、撃たれたプラスミドも跳ね返される</span></li>
+      <li><span>Shift ／ 融合</span><span>押している間、仲間の細胞が元祖細胞のもとへ集まって合体し、大きな1つの細胞になる（プラスミドは合計されるが最大8個）</span></li>
+    </ul>
+    <div class="factions">${FACTIONS.map((f,i)=>`<span><i style="background:${f.color}"></i>${f.name}${i===0?'（あなた）':''}</span>`).join('')}</div>
+    <div class="btns"><button class="btn" id="go" type="button">培養開始</button><button class="btn ghost" id="online" type="button">オンライン対戦</button><button class="btn ghost" id="watch" type="button">AI同士の対戦を見る</button></div>`;
+  overlay.hidden=false;
+  setWatchUI(false);
+  el('go').addEventListener('click',startGame);
+  el('online').addEventListener('click',showLobby);
+  el('watch').addEventListener('click',startWatch);
+  el('go').focus();
+}
+function startGame(){
+  leaveLobby(); overlay.hidden=true; setWatchUI(false); newGame(false); toast('シアン株を接種しました');
+}
+function startWatch(){
+  overlay.hidden=true; setWatchUI(true); newGame(true,true); setFollow(-1); setSpeed(1); toast('AI同士の対戦を開始');
+}
+function endGame(reason){
+  if(S.over) return; S.over=true;
+  const rank=FACTIONS.map((f,i)=>({f,i,m:S.mass[i],n:counts[i]})).sort((a,b)=>b.m-a.m);
+  const total=S.mass.reduce((a,b)=>a+b,0)||1;
+  if(S.net==='host'){
+    const r=rank.map(x=>[x.i,x.n,Math.round(x.m)]);
+    netEmit('end',{g:NET.g,reason,rank:r,t:Math.floor(S.t)});
+    showNetResult(r,reason,Math.floor(S.t));
+    return;
+  }
+  if(S.watch){
+    const w=rank[0].f;
+    card.innerHTML=`
+      <div class="eyebrow">観戦結果</div>
+      <h1>${w.name}の勝利</h1>
+      <p class="lead">${reason==='watch-sweep' ? `${Math.floor(S.t)}秒で、${w.name}が他の株をすべて駆逐しました。` : `${MATCH_LABEL}間の培養を終え、${w.name}がバイオマス首位（${Math.round(rank[0].m/total*100)}%）でした。`}</p>
+      <div class="result-table">${rank.map((r,k)=>`<div><span>${k+1}位</span><i style="background:${r.f.color}"></i><span class="nm">${r.f.name}</span><span>${r.n}個</span><span>${Math.round(r.m)}</span></div>`).join('')}</div>
+      <div class="btns"><button class="btn" id="watch" type="button">もう一度観戦する</button><button class="btn ghost" id="go" type="button">自分で遊ぶ</button></div>`;
+    overlay.hidden=false;
+    el('watch').addEventListener('click',startWatch);
+    el('go').addEventListener('click',startGame);
+    el('watch').focus();
+    return;
+  }
+  const won=reason!=='lost' && rank[0].i===0;
+  const head = reason==='lost' ? 'シアン株 全滅' : reason==='sweep' ? '完全制圧' : won ? '優勢勝利' : '敗北';
+  const lead = reason==='lost' ? `経過 ${Math.floor(S.t)} 秒で、あなたの株は最後の1細胞を失いました。`
+            : reason==='sweep' ? '他の3株をすべて駆逐しました。シャーレはシアン株のものです。'
+            : won ? `${MATCH_LABEL}間の培養を終え、シアン株がバイオマス首位（${Math.round(S.mass[0]/total*100)}%）でした。`
+            : `首位は${rank[0].f.name}。シアン株は${rank.findIndex(r=>r.i===0)+1}位でした。`;
+  card.innerHTML=`
+    <div class="eyebrow">培養結果</div>
+    <h1>${head}</h1>
+    <p class="lead">${lead}</p>
+    <div class="result-table">${rank.map((r,k)=>`<div class="${r.i===0?'me':''}"><span>${k+1}位</span><i style="background:${r.f.color}"></i><span class="nm">${r.f.name}</span><span>${r.n}個</span><span>${Math.round(r.m)}</span></div>`).join('')}</div>
+    <div class="mystats"><span>最大細胞数 <b>${S.peak}</b></span><span>手動分裂 <b>${S.splits}</b>回</span><span>拾ったプラスミド <b>${S.dnaGot}</b></span><span>乗っ取った細胞 <b>${S.converted}</b></span><span>乗っ取られた細胞 <b>${S.hijacked}</b></span></div>
+    <div class="btns"><button class="btn" id="go" type="button">もう一度培養する</button><button class="btn ghost" id="watch" type="button">AI同士の対戦を見る</button></div>`;
+  overlay.hidden=false;
+  el('go').addEventListener('click',startGame);
+  el('watch').addEventListener('click',startWatch);
+  el('go').focus();
+}
+
+// ---------- オンライン対戦（room 機能） ----------
+// 「対戦を開始」を押した人（ホスト）の画面でゲームを動かし、状態を1秒に約6回、全員へ配る。
+// 参加者は自分の操作を presence で送り、届いた状態を補間して描くだけ。人がいない陣営はAIが動かす。
+let room=null;
+const NET={g:null, seats:{}, inLobby:false, lastRecv:0, snapAt:0, snapSeq:0, foodSeq:0, lastSnap:0, lastFood:0,
+           buf:null, fbuf:null, applied:0, fapplied:0, liveG:null, liveAt:0};
+const LOB={name:'', seat:0};
+try{ LOB.name=cleanName(localStorage.getItem('baiyou-name')); }catch(e){}
+const SNAP_MS=160, FOOD_MS=1500, CHUNK=3300, MODES=['atk','def','grow'];
+// 数値を62進の固定幅文字列に詰める（1回の送信は4KiBまでなので、細胞1個を十数文字に収める）
+const B62='0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ', B62I={};
+[...B62].forEach((ch,i)=>B62I[ch]=i);
+function enc(n,w){ n=Math.max(0,Math.min(62**w-1,Math.round(n))); let s=''; for(let i=0;i<w;i++){ s=B62[n%62]+s; n=Math.floor(n/62); } return s; }
+function dec(s,i,w){ let n=0; for(let k=0;k<w;k++) n=n*62+(B62I[s[i+k]]||0); return n; }
+const encP=v=>enc((v+DISH_R)*2,3), decP=(s,i)=>dec(s,i,3)/2-DISH_R;
+const clampN=(v,a,b)=>Math.max(a,Math.min(b,Number(v)||0));
+function netEmit(topic,data){ if(RM.R) RM.R.emit(topic,data).catch(()=>{}); }
+
+// ホスト：参加者の presence から操作を読む。抜けた人の陣営はAIに任せる
+function readRemoteInputs(){
+  if(!RM.R) return;
+  const here=new Set();
+  for(const p of RM.R.peers()){
+    if(p.sameTab) continue;
+    const seat=NET.seats[p.peer]; if(seat===undefined) continue;
+    here.add(seat);
+    const pr=p.presence, q=pr && pr.g===NET.g && pr.in;
+    if(!q) continue;
+    const I=INP[seat];
+    I.x=clampN(q.x,-DISH_R,DISH_R); I.y=clampN(q.y,-DISH_R,DISH_R); I.fu=!!q.fu;
+    I.sp=Math.max(I.sp,q.sp|0); I.fi=Math.max(I.fi,q.fi|0); I.m=MODES.includes(q.m)?q.m:'grow';
+  }
+  if(S.t<6) return;
+  for(const peer in NET.seats){
+    const seat=NET.seats[peer];
+    if(seat!==ME && HUM[seat] && !here.has(seat)){ HUM[seat]=false; toast((NAMES[seat]||FACTIONS[seat].name)+'が抜けたので、AIが引き継ぎます'); }
+  }
+}
+// ホスト：細胞・弾・漂うプラスミドは約0.16秒ごと、養分は1.5秒ごとに配る
+function hostBroadcast(now){
+  if(!RM.R) return;
+  if(now-NET.lastSnap>=SNAP_MS){ NET.lastSnap=now; sendSnap(); }
+  if(now-NET.lastFood>=FOOD_MS){ NET.lastFood=now; sendFood(); }
+}
+function sendSnap(){
+  const s=++NET.snapSeq;
+  const sh=shots.slice(0,60).map(o=>encP(o.x)+encP(o.y)+enc((o.vx+1000)*1.9,2)+enc((o.vy+1000)*1.9,2)+o.f).join('');
+  const dn=dnas.filter(d=>d.alive).slice(0,200).map(d=>encP(d.x)+encP(d.y)+(d.f+1)).join('');
+  const strs=cells.map(c=>enc(c.id%238328,3)+encP(c.x)+encP(c.y)+enc(c.mass*4,2)
+    +B62[c.f*6+MODES.indexOf(c.mode)*2+(c.leader?1:0)]+enc(c.no,2)+B62[c.pl.length]+c.pl.join(''));
+  const chunks=[]; let cur='', lim=Math.max(600,CHUNK-sh.length-dn.length);
+  for(const t of strs){ if(cur.length+t.length>lim){ chunks.push(cur); cur=''; lim=CHUNK; } cur+=t; }
+  chunks.push(cur);
+  const z=S.sanct;
+  const h={t:Math.round(S.time*10)/10, m:S.mass.map(Math.round), n:counts, nm:NAMES, hum:HUM.map(b=>b?1:0),
+           z: z ? [z.id, z.x, z.y, z.s, z.owner, z.for, Math.round(z.t*10)/10] : null};
+  chunks.forEach((c,i)=>netEmit('snap', i===0 ? {g:NET.g,s,i,n:chunks.length,h,c,x:sh,d:dn} : {g:NET.g,s,i,n:chunks.length,c}));
+}
+function sendFood(){
+  const s=++NET.foodSeq;
+  const all=foods.filter(f=>f.alive).map(f=>enc((f.x+DISH_R)/1.26,2)+enc((f.y+DISH_R)/1.26,2)).join('');
+  const n=Math.max(1,Math.ceil(all.length/CHUNK));
+  for(let i=0;i<n;i++) netEmit('food',{g:NET.g,s,i,n,d:all.slice(i*CHUNK,(i+1)*CHUNK)});
+}
+
+// 参加者：分割して届いた状態を、そろった回だけ反映する（届かなかった回は飛ばす）
+function gather(key,d){
+  if(d.s<=NET[key==='buf'?'applied':'fapplied']) return null;
+  let b=NET[key];
+  if(!b || b.s!==d.s){ if(b && d.s<b.s) return null; b=NET[key]={s:d.s,n:d.n|0,parts:[],got:0}; }
+  if(b.parts[d.i]!==undefined || d.i<0 || d.i>=b.n) return null;
+  b.parts[d.i]=d; b.got++;
+  if(b.got<b.n) return null;
+  NET[key]=null; NET[key==='buf'?'applied':'fapplied']=d.s;
+  return b.parts;
+}
+function onSnap(m){
+  const d=m.data; if(!d || typeof d!=='object') return;
+  if(NET.inRoom && d.g){ NET.liveG=d.g; NET.liveAt=performance.now(); return; }
+  if(S.net!=='client' || d.g!==NET.g) return;
+  NET.lastRecv=performance.now();
+  const parts=gather('buf',d); if(parts) applySnap(parts);
+}
+function applySnap(parts){
+  const h=parts[0].h||{};
+  S.time=+h.t||0;
+  // 保護区：出現と確保をこの画面でも知らせる
+  if(Array.isArray(h.z)){
+    const [id,x,y,s,owner,fr,t]=h.z.map(v=>+v||0), prev=S.sanct;
+    S.sanct={id,x,y,s:clampN(s,50,800),owner:Math.max(-1,Math.min(3,owner)),for:Math.max(0,Math.min(3,fr)),t};
+    if(!prev || prev.id!==id) toast(`${FACTIONS[S.sanct.for].name}の近くに保護区が出現（${Math.ceil(t)}秒）`);
+    else if(prev.owner<0 && S.sanct.owner>=0) toast(S.sanct.owner===ME ? '保護区を確保した。他の色は入れない' : `保護区は${FACTIONS[S.sanct.owner].name}が確保した`);
+  } else S.sanct=null;
+  if(Array.isArray(h.m)) S.mass=[0,1,2,3].map(i=>+h.m[i]||0);
+  if(Array.isArray(h.n)) counts=[0,1,2,3].map(i=>h.n[i]|0);
+  if(Array.isArray(h.nm)){ const nn=[0,1,2,3].map(i=>cleanName(h.nm[i])); if(nn.join('\n')!==NAMES.join('\n')){ NAMES=nn; buildFrows(); } }
+  const prev=new Map(cells.map(c=>[c.id,c])), next=[];
+  for(const p of parts){
+    const s=typeof p.c==='string'?p.c:''; let i=0;
+    while(i+15<=s.length){
+      const id=dec(s,i,3), x=decP(s,i+3), y=decP(s,i+6), mass=dec(s,i+9,2)/4, fl=B62I[s[i+11]]||0, no=dec(s,i+12,2), len=Math.min(9,B62I[s[i+14]]||0);
+      const pl=[]; for(let k=0;k<len;k++) pl.push(Math.min(3,Math.max(0,+s[i+15+k]||0)));
+      i+=15+len;
+      const o=prev.get(id), c=o||{id,seed:(id*.37)%10,axis:(id*1.7)%TAU,pop:0};
+      c.fx=o?o.x:x; c.fy=o?o.y:y; c.tx=x; c.ty=y; if(!o){ c.x=x; c.y=y; }
+      c.f=Math.min(3,Math.floor(fl/6)); c.mode=MODES[Math.floor(fl%6/2)]||'grow'; c.leader=!!(fl%2);
+      c.no=no; c.pl=pl; c.mass=mass; c.r=rad(mass);
+      next.push(c);
+    }
+  }
+  cells=next;
+  shots=[]; const xs=typeof parts[0].x==='string'?parts[0].x:'';
+  for(let i=0;i+11<=xs.length;i+=11) shots.push({x:decP(xs,i),y:decP(xs,i+3),vx:dec(xs,i+6,2)/1.9-1000,vy:dec(xs,i+8,2)/1.9-1000,f:Math.min(3,+xs[i+10]||0)});
+  dnas=[]; const ds=typeof parts[0].d==='string'?parts[0].d:'';
+  for(let i=0;i+7<=ds.length;i+=7) dnas.push({x:decP(ds,i),y:decP(ds,i+3),f:Math.min(3,(+ds[i+6]||0)-1),alive:true,ttl:12,ph:i});
+  S.leaders=[null,null,null,null]; for(const c of cells) if(c.leader) S.leaders[c.f]=c;
+  NET.snapAt=performance.now();
+}
+function onFood(m){
+  const d=m.data; if(!d || S.net!=='client' || d.g!==NET.g) return;
+  const parts=gather('fbuf',d); if(!parts) return;
+  const s=parts.map(p=>typeof p.d==='string'?p.d:'').join(''); foods=[];
+  for(let i=0;i+4<=s.length;i+=4) foods.push({x:dec(s,i,2)*1.26-DISH_R,y:dec(s,i+2,2)*1.26-DISH_R,v:1+(i%7)/5,alive:true,ph:i});
+}
+function onEv(m){ const d=m.data; if(d && S.net==='client' && d.g===NET.g && d.to===ME) toast(String(d.msg||'').slice(0,40)); }
+function onEnd(m){
+  const d=m.data; if(!d || S.net!=='client' || d.g!==NET.g || S.over) return;
+  S.over=true;
+  showNetResult(Array.isArray(d.rank)?d.rank:[], d.reason, d.t|0);
+}
+// 参加者の1フレーム：補間して動かし、カメラを合わせ、自分の操作を presence で送る
+function clientFrame(dt){
+  S.t+=dt;
+  const now=performance.now(), a=Math.min(1,(now-(NET.snapAt||now))/SNAP_MS);
+  for(const c of cells){ c.x=c.fx+(c.tx-c.fx)*a; c.y=c.fy+(c.ty-c.fy)*a; c.pop=Math.min(1,c.pop+dt*4); }
+  for(const s of shots){ s.x+=s.vx*dt; s.y+=s.vy*dt; }
+  if(S.sanct) S.sanct.t=Math.max(0,S.sanct.t-dt);
+  const L=ME>=0 ? S.leaders[ME] : null, k=Math.min(1,dt*3);
+  if(L){
+    const zt=Math.max(.35,Math.min(1.2,Math.min(vw,vh)/(L.r*14+460)));
+    S.cam.x+=(L.x-S.cam.x)*k; S.cam.y+=(L.y-S.cam.y)*k; S.cam.z+=(zt-S.cam.z)*Math.min(1,dt*1.5);
+  } else {
+    S.cam.x+=(0-S.cam.x)*dt; S.cam.y+=(0-S.cam.y)*dt;
+    S.cam.z+=(Math.min(vw,vh)/(DISH_R*2.1)-S.cam.z)*dt*2;
+  }
+  if(ME>=0 && RM.R){
+    const mw=screenToWorld(pointer.x,pointer.y), I=INP[ME];
+    I.x=mw.x; I.y=mw.y; I.fu=shiftHeld||btnFuse; I.m=selMode;
+    RM.R.presence({g:NET.g, in:{x:Math.round(I.x),y:Math.round(I.y),fu:I.fu?1:0,sp:I.sp,fi:I.fi,m:I.m}}).catch(()=>{});
+  }
+  if(now-NET.lastRecv>6000) netLost();
+}
+function netLost(){
+  if(S.over) return; S.over=true;
+  card.innerHTML=`
+    <div class="eyebrow">オンライン対戦</div>
+    <h1>接続が切れました</h1>
+    <p class="lead">ホストの画面から6秒以上、状態が届きませんでした。ホストがページを閉じたか、タブを裏に回した可能性があります。</p>
+    <div class="btns"><button class="btn" id="to-lobby" type="button">ロビーへ戻る</button><button class="btn ghost" id="to-title" type="button">タイトルへ</button></div>`;
+  overlay.hidden=false; bindNetButtons();
+}
+function bindNetButtons(){
+  el('to-lobby').addEventListener('click',()=>{ leaveRoom(); newGame(true); showLobby(); });
+  el('to-title').addEventListener('click',()=>{ leaveLobby(); newGame(true); showTitle(); });
+  el('to-lobby').focus();
+}
+// オンラインの結果画面（ホストと参加者で共通）。rank は [陣営, 細胞数, バイオマス] の並び
+function showNetResult(rank, reason, t){
+  const total=rank.reduce((a,r)=>a+(+r[2]||0),0)||1;
+  const label=i=>FACTIONS[i].name+(NAMES[i]?`（${esc(NAMES[i])}）`:'（AI）');
+  const w=rank[0] ? rank[0][0]|0 : 0;
+  const myRank=rank.findIndex(r=>(r[0]|0)===ME)+1;
+  card.innerHTML=`
+    <div class="eyebrow">オンライン対戦の結果</div>
+    <h1>${ME>=0 && w===ME ? 'あなたの勝利' : `${FACTIONS[w].name}の勝利`}</h1>
+    <p class="lead">${reason==='net-sweep' ? `${t}秒で、${label(w)}が他の株をすべて駆逐しました。` : `${MATCH_LABEL}間の培養を終え、${label(w)}がバイオマス首位（${Math.round((+rank[0][2]||0)/total*100)}%）でした。`}${ME>=0 && myRank ? `あなたは${myRank}位です。` : ''}</p>
+    <div class="result-table">${rank.map((r,k)=>{ const i=Math.min(3,r[0]|0); return `<div class="${i===ME?'me':''}"><span>${k+1}位</span><i style="background:${FACTIONS[i].color}"></i><span class="nm">${label(i)}</span><span>${r[1]|0}個</span><span>${Math.round(+r[2]||0)}</span></div>`; }).join('')}</div>
+    <div class="btns"><button class="btn" id="to-lobby" type="button">ロビーへ戻る</button><button class="btn ghost" id="to-title" type="button">タイトルへ</button></div>`;
+  overlay.hidden=false; bindNetButtons();
+}
+
+// ---------- ロビーとルーム ----------
+// ロビー（このページを開いている全員）でルームを作る／一覧から選ぶ。ルームの中で席（陣営）を選び、
+// ホストは空いた席をAIにできる。4席すべてが人かAIで埋まると、3秒後に自動で始まる。
+// 対戦の通信はルームごとの部屋（named room）で行うので、複数のルームが同時に遊べる。
+const RM={code:null, R:null, host:false, ai:[false,false,false,false], seat:-1, cdAt:0, blocked:false, lastCd:null, lastN:-1, html:''};
+const roomStatus = t => { const s=el('lob-status'); if(s) s.textContent=t; };
+function lobbyPresence(){
+  if(!room) return;
+  const adv = RM.host && RM.code ? {code:RM.code, host:LOB.name||'ホスト', n:RM.lastN<0?1:RM.lastN} : null;
+  room.presence({lob: NET.inLobby||NET.inRoom ? {name:LOB.name} : null, adv}).catch(()=>{});
+}
+function nameField(){
+  return `<div class="field"><label for="lob-name">名前（10文字まで）</label><input id="lob-name" maxlength="10" autocomplete="off" placeholder="例：たろう"></div>`;
+}
+function bindNameField(){
+  const inp=el('lob-name'); inp.value=LOB.name;
+  inp.addEventListener('input',()=>{
+    LOB.name=cleanName(inp.value);
+    try{ localStorage.setItem('baiyou-name',LOB.name); }catch(e){}
+    lobbyPresence(); if(NET.inRoom) roomPresence();
+  });
+  return inp;
+}
+
+// ロビー画面
+function showLobby(){
+  NET.inLobby=true; NET.inRoom=false; NET.lobbyHtml='';
+  setWatchUI(false);
+  card.innerHTML=`
+    <div class="eyebrow">オンライン対戦</div>
+    <h1>ロビー</h1>
+    <p class="lead">${P2P
+      ? '名前を入れて、ルームを作るか、教えてもらったルームコードで参加してください。ルームの4つの席（陣営）が人かAIで埋まると、自動で対戦が始まります。'
+      : '名前を入れて、ルームを作るか、開いているルームに参加してください。ルームの4つの席（陣営）が人かAIで埋まると、自動で対戦が始まります。'}</p>
+    ${nameField()}
+    <div class="btns"><button class="btn" id="lob-create" type="button">ルームを作る</button><button class="btn ghost" id="lob-back" type="button">戻る</button></div>
+    ${P2P
+      ? `<div class="field"><label for="lob-code">ルームコードで参加</label><div class="code-row"><input id="lob-code" maxlength="6" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="例：k3v6q"><button class="btn small" id="lob-join" type="button">参加</button></div></div>`
+      : `<div class="hud-title">開いているルーム</div>`}
+    <div class="rooms" id="lob-rooms"></div>
+    <p class="note" id="lob-status"></p>`;
+  overlay.hidden=false;
+  const inp=bindNameField();
+  const newCode=()=>Math.random().toString(36).slice(2,2+(P2P?5:4)).padEnd(P2P?5:4,'0');
+  el('lob-create').addEventListener('click',()=>enterRoom(newCode(),true));
+  el('lob-back').addEventListener('click',()=>{ leaveLobby(); showTitle(); });
+  el('lob-rooms').addEventListener('click',e=>{ const b=e.target.closest('button[data-code]'); if(b) enterRoom(b.dataset.code,false); });
+  if(P2P){
+    const ci=el('lob-code');
+    const go=()=>{ const v=String(ci.value||'').trim().toLowerCase(); if(/^[a-z0-9]{4,6}$/.test(v)) enterRoom(v,false); else roomStatus('ルームコードは英数字4〜6文字です。'); };
+    el('lob-join').addEventListener('click',go);
+    ci.addEventListener('keydown',e=>{ if(e.key==='Enter') go(); });
+  }
+  lobbyPresence(); renderLobby();
+  inp.focus();
+}
+function renderLobby(){
+  if(NET.inRoom) return renderRoom();
+  if(!NET.inLobby || !el('lob-rooms')) return;
+  if(P2P){
+    roomStatus('ルームを作ると、参加用のコードが出ます。そのコードを一緒に遊ぶ人に伝えてください。');
+    el('lob-create').disabled=false;
+    return;
+  }
+  const peers=room ? room.peers() : [];
+  const ads=peers.map(p=>p.presence && p.presence.adv).filter(a=>a && /^[a-z0-9]{4}$/.test(a.code));
+  const html = ads.length
+    ? ads.map(a=>`<div class="room-row"><span><b>${esc(cleanName(a.host)||'ホスト')}のルーム</b><small>コード ${a.code} ・ 人 ${clampN(a.n,0,4)|0}/4</small></span><button class="btn small" type="button" data-code="${a.code}">参加</button></div>`).join('')
+    : '<p class="note">まだルームがありません。「ルームを作る」で作れます。</p>';
+  if(html!==NET.lobbyHtml){ NET.lobbyHtml=html; el('lob-rooms').innerHTML=html; }
+  if(!room) roomStatus('この画面ではオンライン機能を使えません。claude.ai にサインインした状態で、共有されたリンクから開いてください。');
+  else if(!room.connected()) roomStatus('接続中…');
+  else roomStatus(`いまこのページを開いている人：${peers.length}人`);
+  el('lob-create').disabled=!room;
+}
+function leaveLobby(){ leaveRoom(); NET.inLobby=false; lobbyPresence(); }
+
+// ルームに入る（作った人がホスト）
+async function enterRoom(code,host){
+  if(!room) return;
+  let R;
+  roomStatus(host ? 'ルームを作っています…' : 'ルームに接続しています…');
+  try{ R=await room.join('baiyou-'+code, host); }
+  catch(e){ roomStatus((P2P && e && e.message ? e.message+'。' : 'ルームに入れませんでした。')+'少し待ってからもう一度試してください。'); return; }
+  Object.assign(RM,{code, R, host, ai:[false,false,false,false], seat:host?0:-1, cdAt:0, blocked:false, lastCd:null, lastN:-1, html:''});
+  NET.inLobby=false; NET.inRoom=true; NET.liveG=null;
+  R.on('start',onStart); R.on('snap',onSnap); R.on('food',onFood); R.on('ev',onEv); R.on('end',onEnd);
+  R.onPeers(()=>renderRoom());
+  showRoom(); roomPresence(); lobbyPresence();
+}
+function leaveRoom(){
+  if(RM.R) RM.R.leave().catch(()=>{});
+  Object.assign(RM,{code:null, R:null, host:false, seat:-1, cdAt:0, lastN:-1});
+  NET.inRoom=false;
+}
+function roomPresence(){
+  if(!RM.R) return;
+  const cd = RM.host && RM.cdAt ? Math.max(0,Math.ceil((RM.cdAt-performance.now())/1000)) : null;
+  RM.R.presence({seat:RM.seat, name:LOB.name, host:RM.host||null, ai:RM.host?RM.ai:null, cd, g:null, in:null}).catch(()=>{});
+}
+// 席の状態：人（先に座った人）＞ AI（ホストの設定）＞ 空き
+function seatsState(){
+  const peers=RM.R ? RM.R.peers() : [];
+  const hostP=peers.find(p=>p.presence && p.presence.host);
+  const ai=hostP && Array.isArray(hostP.presence.ai) ? [0,1,2,3].map(i=>!!hostP.presence.ai[i]) : [false,false,false,false];
+  const st=[0,1,2,3].map(i=>({kind:ai[i]?'ai':'open'}));
+  for(const p of peers){
+    const s=p.presence && p.presence.seat;
+    if(!(Number.isInteger(s) && s>=0 && s<4) || st[s].kind==='human') continue;
+    st[s]={kind:'human', peer:p.peer, name:cleanName(p.presence.name), me:p.sameTab};
+  }
+  return {st, hostP, cd:hostP ? hostP.presence.cd : null};
+}
+function showRoom(){
+  card.innerHTML=`
+    <div class="eyebrow">オンライン対戦 ／ ルーム ${RM.code}</div>
+    <h1>${RM.host ? 'あなたのルーム' : 'ルーム'}</h1>
+    <p class="lead" id="room-lead"></p>
+    ${nameField()}
+    <div class="seats" id="room-seats"></div>
+    <p class="note" id="lob-status"></p>
+    <div class="btns"><button class="btn ghost" id="lob-live" type="button" hidden>進行中の対戦を観戦</button><button class="btn ghost" id="room-leave" type="button">ルームを出る</button></div>`;
+  overlay.hidden=false;
+  bindNameField();
+  el('room-seats').addEventListener('click',e=>{
+    const b=e.target.closest('button[data-act]'); if(!b) return;
+    const s=+b.dataset.seat;
+    if(b.dataset.act==='sit') RM.seat=s;
+    else if(b.dataset.act==='stand') RM.seat=-1;
+    else if(RM.host){ RM.ai[s]=b.dataset.act==='ai'; RM.blocked=false; }
+    roomPresence(); renderRoom();
+  });
+  el('lob-live').addEventListener('click',()=>{ if(NET.liveG) beginNet('client',NET.liveG,{},['','','',''],-1); });
+  el('room-leave').addEventListener('click',()=>{ leaveRoom(); showLobby(); });
+  RM.html=''; renderRoom();
+}
+function renderRoom(){
+  if(!NET.inRoom || !el('room-seats')) return;
+  const {st,hostP,cd}=seatsState();
+  // 自分が選んだ席に先客がいたら、座っていない状態に戻す
+  if(RM.seat>=0 && st[RM.seat].kind==='human' && !st[RM.seat].me){ RM.seat=-1; roomPresence(); }
+  const html=st.map((s,i)=>{
+    const f=FACTIONS[i], who = s.kind==='human' ? esc(s.name||'名前なし')+(s.me?'（あなた）':'') : s.kind==='ai' ? 'AI' : '空き';
+    const acts=[];
+    if(s.kind!=='human') acts.push(`<button type="button" class="mini" data-act="sit" data-seat="${i}">ここに座る</button>`);
+    if(s.me) acts.push(`<button type="button" class="mini" data-act="stand" data-seat="${i}">席を立つ</button>`);
+    if(RM.host && s.kind!=='human') acts.push(`<button type="button" class="mini" data-act="${s.kind==='ai'?'open':'ai'}" data-seat="${i}">${s.kind==='ai'?'空きにする':'AIにする'}</button>`);
+    return `<div class="seat-card ${s.kind}${s.me?' mine':''}"><b><i style="background:${f.color}"></i>${f.name}</b><small>${who}</small><div class="acts">${acts.join('')}</div></div>`;
+  }).join('');
+  if(html!==RM.html){ RM.html=html; el('room-seats').innerHTML=html; }
+  const open=st.filter(s=>s.kind==='open').length;
+  el('room-lead').textContent = RM.host
+    ? (P2P ? `あなたがホストです。ルームコード「${RM.code}」を一緒に遊ぶ人に伝えてください。` : `あなたがホストです。ほかの人はロビーの一覧からこのルームに参加できます。`)
+      + `空いた席は「AIにする」でAIに任せられます。対戦中のゲームはあなたの画面で動くので、終わるまでこのタブを開いたままにしてください。`
+    : `ホスト：${hostP ? (cleanName(hostP.presence.name)||'名前なし') : '（いません）'}。空いている席を選んで座ってください。`;
+  if(!hostP && !RM.host) roomStatus('ホストがルームにいません。ルームを出て、作り直してください。');
+  else if(cd!=null) roomStatus(`全員そろいました。開始まで ${cd} 秒`);
+  else if(RM.blocked && RM.host) roomStatus(RM.blockMsg||'開始できませんでした。');
+  else roomStatus(open ? `あと${open}席。すべての席が人かAIで埋まると、3秒後に始まります。` : '人が1人以上座ると始まります。');
+  el('lob-live').hidden=!(NET.liveG && performance.now()-NET.liveAt<3000);
+}
+// ホスト：席がそろったら3秒数えて開始。途中で崩れたら数え直す
+function roomTick(now){
+  if(!RM.host || !RM.R) return;
+  const {st}=seatsState(), humans=st.filter(s=>s.kind==='human').length;
+  const full=humans>0 && st.every(s=>s.kind!=='open');
+  if(!full){ RM.cdAt=0; RM.blocked=false; }
+  else if(!RM.cdAt && !RM.blocked) RM.cdAt=now+3000;
+  const cd=RM.cdAt ? Math.max(0,Math.ceil((RM.cdAt-now)/1000)) : null;
+  if(cd!==RM.lastCd || humans!==RM.lastN){ RM.lastCd=cd; RM.lastN=humans; roomPresence(); lobbyPresence(); }
+  if(RM.cdAt && now>=RM.cdAt){ RM.cdAt=0; RM.blocked=true; hostStart(st); }
+}
+async function hostStart(st){
+  const seats={}, names=['','','',''];
+  st.forEach((s,i)=>{ if(s.kind==='human'){ seats[s.peer]=i; names[i]=s.name||('プレイヤー'+(i+1)); } });
+  const mine=st.findIndex(s=>s.me);
+  const g=Math.random().toString(36).slice(2,10);
+  try{ await RM.R.emit('start',{g,seats,names}); }
+  catch(e){
+    RM.blockMsg = e && e.code==='not_permitted'
+      ? '対戦を開始できるのは、このページの共同編集者（Contributor）以上の人だけです。開始できる人にルームを作ってもらってください。'
+      : '開始できませんでした。席を座り直すともう一度数え始めます。';
+    renderRoom(); return;
+  }
+  beginNet('host',g,seats,names,mine);
+}
+function onStart(m){
+  const d=m.data; if(m.sameTab || !d || typeof d!=='object' || !NET.inRoom || !RM.R) return;
+  const me=RM.R.peers().find(p=>p.sameTab), seats=d.seats && typeof d.seats==='object' ? d.seats : {};
+  const seat=me && seats[me.peer]!==undefined ? Math.min(3,seats[me.peer]|0) : -1;
+  beginNet('client', String(d.g||''), seats, Array.isArray(d.names)?d.names:['','','',''], seat);
+}
+function beginNet(role,g,seats,names,me){
+  NET.inLobby=false; NET.inRoom=false; RM.host=role==='host' && RM.host; lobbyPresence();
+  NET.g=g; NET.seats={}; for(const k in seats) NET.seats[k]=Math.min(3,Math.max(0,seats[k]|0));
+  NET.lastRecv=performance.now(); NET.snapAt=0; NET.buf=null; NET.fbuf=null; NET.applied=0; NET.fapplied=0; NET.lastSnap=0; NET.lastFood=0;
+  const hum=[0,1,2,3].map(s=>Object.values(NET.seats).includes(s));
+  overlay.hidden=true; setWatchUI(false);
+  newGame(false,false,{net:role, me:me??-1, hum, names:[0,1,2,3].map(i=>cleanName(names[i]))});
+  if(role==='client'){ cells=[]; foods=[]; dnas=[]; shots=[]; S.leaders=[null,null,null,null]; }
+  el('sec-mode').hidden=ME<0; el('my-stats').hidden=ME<0;
+  toast(ME>=0 ? `${FACTIONS[ME].name}として参加` : '観戦として参加');
+}
+// ---------- claude.ai の外（普通のWebサイト）での通信：WebRTC（PeerJS） ----------
+// アカウントなしで遊べるように、ブラウザ同士を直接つなぐ。ホストの画面が中継役になる星形のつながりで、
+// ゲーム側からは room 機能と同じ呼び方（emit / on / presence / peers / onPeers / join / leave）で使える。
+// 最初の顔合わせだけ PeerJS の無料サーバーを使う。ルームの一覧はないので、ホストが表示するコードで参加する
+function makeP2PRoom(){
+  let handlers={}, peersCbs=[], baseCbs=null;
+  const connCbs=[];
+  let peer=null, me=null, isHost=false, hostConn=null, conns=new Map(), table=new Map(), list=[], myPres={}, up=false;
+  let presTimer=null, bcastTimer=null;
+  const info=p=>({peer:p, by:null, isMe:p===me, sameTab:p===me, kind:'viewer', guest:false});
+  const deliver=(topic,data,from)=>{ for(const f of handlers[topic]||[]){ try{ f({...info(from),topic,data}); }catch(e){} } };
+  const snapshot=()=>{
+    if(me) table.set(me,{...myPres});
+    list=[...table.entries()].map(([p,pr])=>({...info(p),presence:pr||{},updatedAt:Date.now()}));
+    const ch={peers:list,joined:[],left:[],updated:[]};
+    for(const f of peersCbs){ try{ f(ch); }catch(e){} }
+  };
+  const setUp=v=>{ up=v; for(const f of connCbs){ try{ f(v); }catch(e){} } };
+  // ホスト：全員の presence を1秒に約10回まとめて配る
+  const bcastPeers=()=>{ if(bcastTimer) return; bcastTimer=setTimeout(()=>{ bcastTimer=null; const arr=[...table.entries()]; for(const c of conns.values()) if(c.open) c.send({t:'peers',list:arr}); },100); };
+  function onData(from,m){
+    if(!m || typeof m!=='object') return;
+    if(isHost){
+      if(m.t==='pres'){ table.set(from, m.presence && typeof m.presence==='object' ? m.presence : {}); snapshot(); bcastPeers(); }
+      else if(m.t==='emit' && typeof m.topic==='string'){ for(const c of conns.values()) if(c.open) c.send({t:'emit',topic:m.topic,data:m.data,from}); deliver(m.topic,m.data,from); }
+    } else {
+      if(m.t==='peers' && Array.isArray(m.list)){ table=new Map(m.list.filter(e=>Array.isArray(e)&&typeof e[0]==='string')); snapshot(); }
+      else if(m.t==='emit' && typeof m.topic==='string') deliver(m.topic,m.data,String(m.from||''));
+    }
+  }
+  const api={
+    connected:()=>up,
+    onConnection(f){ connCbs.push(f); setTimeout(()=>f(up),0); return ()=>{}; },
+    onPeers(f){ peersCbs.push(f); return ()=>{}; },
+    on(t,f){ (handlers[t]=handlers[t]||[]).push(f); return ()=>{}; },
+    peers:()=>list,
+    emit(topic,data){
+      if(!up) return Promise.resolve();
+      if(isHost){ for(const c of conns.values()) if(c.open) c.send({t:'emit',topic,data,from:me}); deliver(topic,data,me); }
+      else if(hostConn && hostConn.open) hostConn.send({t:'emit',topic,data});
+      return Promise.resolve();
+    },
+    presence(patch){
+      for(const k in patch){ if(patch[k]===null) delete myPres[k]; else myPres[k]=patch[k]; }
+      if(presTimer) return Promise.resolve();
+      // 1秒に約30回までにまとめて送る
+      presTimer=setTimeout(()=>{ presTimer=null;
+        if(isHost){ snapshot(); bcastPeers(); }
+        else if(hostConn && hostConn.open) hostConn.send({t:'pres',presence:myPres});
+      },33);
+      return Promise.resolve();
+    },
+    // 名前（コード）の部屋に入る。asHost なら部屋を開き、そうでなければホストにつなぐ
+    join(name,asHost){
+      api.leave();
+      if(!baseCbs) baseCbs=peersCbs.slice();
+      handlers={}; peersCbs=baseCbs.slice();
+      isHost=!!asHost;
+      const id='baiyou-sensen-'+String(name).replace(/^baiyou-/,'');
+      return new Promise((res,rej)=>{
+        let done=false;
+        const fail=e=>{ if(done) return; done=true; api.leave(); rej({code:'upstream_error', message:e&&e.type==='unavailable-id' ? 'そのコードはもう使われています' : e&&e.type==='peer-unavailable' ? 'ルームが見つかりません（コードが違うか、ホストがいません）' : 'つながりませんでした'}); };
+        try{ peer = isHost ? new window.Peer(id) : new window.Peer(); }catch(e){ fail(e); return; }
+        peer.on('error',fail);
+        peer.on('open',pid=>{
+          me=pid;
+          if(isHost){
+            peer.on('connection',c=>{
+              c.on('open',()=>{ conns.set(c.peer,c); table.set(c.peer,{}); snapshot(); bcastPeers(); });
+              c.on('data',m=>onData(c.peer,m));
+              c.on('close',()=>{ conns.delete(c.peer); table.delete(c.peer); snapshot(); bcastPeers(); });
+            });
+            done=true; setUp(true); snapshot(); res(api);
+          } else {
+            const c=peer.connect(id,{reliable:true,serialization:'json'}); hostConn=c;
+            const to=setTimeout(()=>fail({type:'peer-unavailable'}),10000);
+            c.on('open',()=>{ clearTimeout(to); done=true; setUp(true); c.send({t:'pres',presence:myPres}); snapshot(); res(api); });
+            c.on('data',m=>onData(id,m));
+            c.on('close',()=>{ setUp(false); table=new Map(); snapshot(); });
+          }
+        });
+      });
+    },
+    leave(){
+      try{ if(peer) peer.destroy(); }catch(e){}
+      peer=null; hostConn=null; conns=new Map(); table=new Map(); list=[]; me=null;
+      if(up) setUp(false);
+      return Promise.resolve();
+    },
+  };
+  return api;
+}
+// claude.ai の中では room 機能、外では PeerJS が読み込めていれば WebRTC を使う
+const P2P = !(window.claude && window.claude.use) && typeof window.Peer==='function';
+(window.claude && window.claude.use ? window.claude.use('room') : Promise.resolve(P2P ? makeP2PRoom() : null)).then(r=>{
+  room=r; if(!r) return;
+  r.onPeers(()=>renderLobby());
+  r.onConnection(()=>renderLobby());
+}).catch(()=>{});
+
+// ---------- loop ----------
+let last=performance.now();
+function frame(now){
+  const dt=Math.min(.05,(now-last)/1000); last=now;
+  if(S.net==='client'){ if(!S.over) clientFrame(dt); }
+  else if(!S.over){ const n=S.watch?S.speed:1; for(let i=0;i<n && !S.over;i++) update(dt); }
+  if(S.net==='host' && !S.over) hostBroadcast(now);
+  if(NET.inRoom) roomTick(now);
+  if((NET.inLobby||NET.inRoom) && (now|0)%500<20) renderLobby();
+  render();
+  hudT-=dt; if(hudT<=0){ hudT=.2; updateHUD(); }
+  if(toastT>0){ toastT-=dt; if(toastT<=0) toastEl.classList.remove('show'); }
+  requestAnimationFrame(frame);
+}
+newGame(true);
+showTitle();
+requestAnimationFrame(frame);
+})();
+</script>
+
+</body>
+</html>
