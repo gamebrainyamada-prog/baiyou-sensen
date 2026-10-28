@@ -199,7 +199,7 @@ h1 .sub{display:block;font-size:.3em;color:var(--dim);letter-spacing:.3em;margin
         </button>
         <button class="mode" type="button" data-mode="def" aria-pressed="false">
           <svg viewBox="-10 -10 20 20" aria-hidden="true"><path d="M-7.5-8H7.5V0Q6 6.5 0 9Q-6 6.5-7.5 0Z"/></svg>
-          <span><b>防御<kbd>2</kbd></b><small>防御以外の味方に付き添い、プラスミドを入れて守る</small></span>
+          <span><b>防御<kbd>2</kbd></b><small>自分の色を3個残し、余りを味方に撃って治す・補充する</small></span>
           <span class="n" id="mc-def">0</span>
         </button>
         <button class="mode" type="button" data-mode="grow" aria-pressed="true">
@@ -593,8 +593,10 @@ function steerGrow(c,dt){
   if(near && nd<200){ setDir(c,c.x-near.x,c.y-near.y); return; }
   seekFood(c);
 }
-// 防御：防御モード以外の味方（元祖細胞・攻撃・増殖）を探して守る。
-// 外来プラスミドが入った味方や空きのある味方がいれば行って自分の色を入れ、いなければ一番近い味方に付き添って補給する
+// 防御：防御モード以外の味方（元祖細胞・攻撃・増殖）を探して守る。自分の色は DEF_KEEP 個まで手元に残し、
+// 余りだけを、外来プラスミドが入った味方や空き枠のある味方に撃ち込む（当たると治す・補充する）。
+// 余りがなければ漂うプラスミドを集めに行き、撃つ相手がいなければ一番近い味方に付き添って補給する
+const DEF_KEEP=3, DEF_RANGE=320;
 function steerDefend(c,dt,L){
   c.think-=dt;
   if(c.think<=0){
@@ -604,17 +606,45 @@ function steerDefend(c,dt,L){
       if(o===c||o.dead||o.f!==c.f||(o.mode==='def'&&!o.leader)) return;
       const d=Math.hypot(o.x-c.x,o.y-c.y);
       if(d<gd){gd=d;guard=o;}
-      const foreign=o.pl.length-ownCount(o), free=capOf(o.mass)-o.pl.length;
+      const foreign=o.pl.length-ownCount(o), free=holdCap(o)-o.pl.length;
       if(foreign<=0 && free<=0) return;
       const s=foreign*3+free*.5-d/250;
       if(s>bs){bs=s;best=o;}
     });
     c.ally=best; c.guard=guard||L;
   }
-  if(c.ally && !c.ally.dead && c.ally.f===c.f && ownCount(c)>=2 && canFire(c)){ setDir(c,c.ally.x-c.x,c.ally.y-c.y); return; }
+  // 余り（DEF_KEEP 個を超えた分）があり、撃っても自分が乗っ取られないときだけ撃てる
+  const canGive=ownCount(c)>DEF_KEEP && canFire(c);
+  const a=c.ally;
+  if(a && !a.dead && a.f===c.f && canGive){
+    const d=Math.hypot(a.x-c.x,a.y-c.y);
+    if(d<DEF_RANGE+a.r){
+      if(c.fireCd<=0) fire(c,a.x-c.x,a.y-c.y);
+      // 撃てる距離を保ち、近づきすぎたら少し離れる
+      const k=d<a.r+c.r+60 ? -.5 : .15;
+      setDir(c,(a.x-c.x)*k,(a.y-c.y)*k); return;
+    }
+    setDir(c,a.x-c.x,a.y-c.y); return;
+  }
+  // 余りがないときは、視界の中の漂うプラスミド（白か自分の色）を取りに行く。見当たらなければ養分を食べながら探し回る
+  if(!canGive){
+    const dn=nearestPlasmid(c);
+    if(dn){ setDir(c,dn.x-c.x,dn.y-c.y); return; }
+    seekFood(c); return;
+  }
   const g=c.guard && !c.guard.dead && c.guard.f===c.f ? c.guard : L;
   if(g && Math.hypot(g.x-c.x,g.y-c.y)>g.r+c.r+120){ setDir(c,g.x-c.x,g.y-c.y); return; }
   seekFood(c,g);
+}
+// 視界の中で一番近い、取り込める漂うプラスミド（白か自分の色、入れない保護区の中は除く）
+function nearestPlasmid(c){
+  const vr=visR(c); let best=null, bd=vr*vr;
+  for(const dn of dnas){
+    if(!dn.alive || (dn.f>=0 && dn.f!==c.f) || !canTake(c,dn) || blocked(c,dn.x,dn.y)) continue;
+    const d2=(dn.x-c.x)**2+(dn.y-c.y)**2;
+    if(d2<bd){ bd=d2; best=dn; }
+  }
+  return best;
 }
 function followMouse(c,mw){
   let dx=mw.x-c.x, dy=mw.y-c.y; const d=Math.hypot(dx,dy)||1;
@@ -821,22 +851,6 @@ function update(dt){
   if(!zs) foods=foods.filter(fd=>!fd.zid || (fd.alive && !fd.gone));
   else foods=foods.filter(fd=>!fd.gone);
 
-  // 防御モード：触れている味方へ自分の色のプラスミドを渡す（外来があればそれと入れ替えて治す）
-  for(const c of cells){
-    if(c.dead || c.leader || c.mode!=='def' || !c.ally) continue;
-    c.giveCd-=dt;
-    const o=c.ally;
-    if(o.dead || o.f!==c.f){ c.ally=null; continue; }
-    // 渡したあとも自分の色が他のどの色にも負けないときだけ渡す（渡して自分が乗っ取られないように）
-    if(c.giveCd>0 || Math.hypot(o.x-c.x,o.y-c.y)>c.r+o.r+24 || ownCount(c)<2 || !canFire(c)) continue;
-    const fi=o.pl.findIndex(q=>q!==o.f);
-    if(fi<0 && o.pl.length>=capOf(o.mass)){ c.ally=null; continue; }
-    c.pl.splice(c.pl.lastIndexOf(c.f),1);
-    if(fi>=0) o.pl[fi]=o.f; else o.pl.push(o.f);
-    c.giveCd=.6; o.pop=Math.min(o.pop,.85);
-    burst((c.x+o.x)/2,(c.y+o.y)/2,C.dna,3,40);
-    checkConvert(c); checkConvert(o);
-  }
 
   // 細胞同士：押し合うだけ（食べたり合体したりはしない）
   for(const c of cells){
@@ -1270,7 +1284,7 @@ function showTitle(){
     <p class="lead">シャーレの中で4つの菌株が養分を奪い合う。どの株も細胞1つから始まる。あなたが動かすのはその元祖細胞だけ。分裂で生まれた細胞は、選んだモードに従って自分で動く。${MATCH_LABEL}後にいちばん多くのバイオマスを残した陣営が勝つ。</p>
     <ul class="rules">
       <li><span>移動</span><span>マウス（タッチ）の方向へ、元祖細胞（外側に点線の輪がある細胞）が泳ぐ。元祖細胞が失われると、一番大きい細胞が引き継ぐ</span></li>
-      <li><span>1 2 3 ／ モード</span><span>右のパネルで、次に生まれる細胞のモードを選ぶ。生まれた細胞はそれぞれ単独で動く。攻撃＝敵を探して撃ち、撃ち切ったら逃げて補給する（分裂しない）、防御＝防御以外の味方に付き添い、プラスミドを渡して守る、増殖＝敵を避けて養分を集め自分で増える。中心の印（▲ 盾 ＋）でモードが分かる。敵の株も同じ仕組みで動く</span></li>
+      <li><span>1 2 3 ／ モード</span><span>右のパネルで、次に生まれる細胞のモードを選ぶ。生まれた細胞はそれぞれ単独で動く。攻撃＝敵を探して撃ち、撃ち切ったら逃げて補給する（分裂しない）、防御＝自分の色のプラスミドを3個は手元に残し、余りを防御以外の味方に撃ち込んで治す・補充する（余りがなければプラスミドを集めに行く）、増殖＝敵を避けて養分を集め自分で増える。中心の印（▲ 盾 ＋）でモードが分かる。敵の株も同じ仕組みで動く</span></li>
       <li><span>成長</span><span>緑の粒（養分）を取り込むと細胞が大きくなり、プラスミドの容量が 3 → 5 → 7 → 9 個と増える。プラスミドが容量いっぱいのときは、養分を少し多く吸収して次の大きさへ早く育つ。縮むと、あふれたプラスミドは外へ出ていく</span></li>
       <li><span>プラスミド</span><span>細胞の中の、ハートが入った角丸の四角（薄い枠は空き）。自分では増えない。漂う白いプラスミドを拾うか、防御モードの味方から渡されたときだけ増える。外来のプラスミドが入っているときに拾うと、外来のものから優先して治る（枠がいっぱいでも拾える）。容量9の細胞が9個そろうと、4個と5個の2細胞に分裂する</span></li>
       <li><span>F ／ 発射</span><span>元祖細胞から、自分の色のプラスミドを1つマウスの方向へ撃ち出す。当たった敵の細胞には、あなたの色のプラスミドが入り込む。味方に当てると、外来のプラスミドを1つ治す。外来がなければ空き枠に1つ補充する（どちらもない味方はすり抜ける）。外れたものは色つきのまましばらく漂う</span></li>
