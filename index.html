@@ -247,18 +247,21 @@ const FACTIONS = [
   {name:'ビオラ株', latin:'V. viola',  color:tok('--f3'), ai:true,  aggr:.65, mix:{atk:.33,def:.33,grow:.34}},
 ];
 const TAU = Math.PI*2;
-const DISH_R = 2400, GRID = 160, GN = Math.ceil(DISH_R*2/GRID)+1;
-const MIN_SPLIT = 36, P_MAX = 9, DNA_N = 90, CAP = 100, FOOD_N = 1900, MATCH_TIME = 300;
+const DISH_R = 2900, GRID = 160, GN = Math.ceil(DISH_R*2/GRID)+1;
+const MIN_SPLIT = 36, P_MAX = 9, DNA_N = 130, CAP = 100, FOOD_N = 2800, MATCH_TIME = 300;
 // 養分は最初 FOOD_START 個だけ。残りは FOOD_RAMP 秒かけて少しずつ湧いて FOOD_N 個まで増える
-const FOOD_START = 600, FOOD_RAMP = 200;
+const FOOD_START = 880, FOOD_RAMP = 200;
 const MATCH_LABEL = `${MATCH_TIME/60}分`;
 const SPEED = 150;
 // プラスミドが容量いっぱいのときの養分の吸収率（次の容量へ育つ速さ）
 const FULL_BONUS = 1.2;
+// 細胞が代謝で縮むときの下限（これより小さくならないので、餓死はしない）
+const MIN_MASS = 12;
 // 抗生物質イベント（一時的に停止中。true で復活）
 const USE_ANTIBIOTIC = false;
 
-const rad = m => 3 + Math.sqrt(m)*3.2;
+// 質量→半径。育つほど見た目の差がはっきり出るよう、平方根より急に伸ばす（質量12で約15、90で約40、上限70）
+const rad = m => Math.min(70, 4 + Math.pow(Math.max(0,m),0.6)*2.4);
 // 大きさごとのプラスミド容量：3 → 5 → 7 → 9
 const capOf = m => m<35 ? 3 : m<60 ? 5 : m<90 ? 7 : 9;
 // 拾って埋められる上限。攻撃モードは分裂しないよう 8 で止める
@@ -718,9 +721,8 @@ function update(dt){
     const dec=Math.exp(-dt*3); c.ix*=dec; c.iy*=dec;
     const d=Math.hypot(c.x,c.y), lim=DISH_R-c.r;
     if(d>lim){ c.x*=lim/d; c.y*=lim/d; }
-    // 代謝：大きいほど消耗する
-    c.mass-=(.22+(c.mass>40?c.mass*.006:0))*dt;
-    if(c.mass<6){ kill(c); continue; }
+    // 代謝：大きいほど消耗する。ただし質量 MIN_MASS より小さくはならない（餓死はしない）
+    if(c.mass>MIN_MASS) c.mass=Math.max(MIN_MASS, c.mass-(.22+(c.mass>40?c.mass*.006:0))*dt);
     // プラスミドは自分では増えない。増えるのは外からの補充（漂うプラスミドを拾う・撃ち込まれる・防御モードから渡される）だけ
     // 縮んで容量を超えたら、あふれた環を外へ放出する（境目で揺れないよう少し余裕を持たせる）
     while(c.pl.length>capOf(c.mass+5)){
@@ -753,10 +755,14 @@ function update(dt){
     query(cellGrid,s.x,s.y,90,o=>{
       if(s.life<=0 || o.dead || o.id===s.from) return;
       if(o.f===s.f){
-        // 味方に当たったとき：外来のプラスミドがあれば1つ自分の色に戻して治す。なければすり抜ける
+        // 味方に当たったとき：外来のプラスミドがあれば1つ自分の色に戻して治す。外来がなく空き枠があれば1つ補充する。
+        // どちらもなければすり抜ける（攻撃モードの味方は分裂しないよう8個まで）
         if(Math.hypot(o.x-s.x,o.y-s.y)<o.r){
-          const fi=o.pl.findIndex(q=>q!==o.f);
-          if(fi>=0){ o.pl[fi]=o.f; s.life=-1; s.hit=true; o.pop=Math.min(o.pop,.85); burst(s.x,s.y,C.dna,4,50); checkConvert(o); }
+          const fi=o.pl.findIndex(q=>q!==o.f), room=o.pl.length<holdCap(o);
+          if(fi>=0 || room){
+            if(fi>=0) o.pl[fi]=o.f; else o.pl.push(o.f);
+            s.life=-1; s.hit=true; o.pop=Math.min(o.pop,.85); burst(s.x,s.y,C.dna,4,50); checkConvert(o);
+          }
         }
         return;
       }
@@ -1267,7 +1273,7 @@ function showTitle(){
       <li><span>1 2 3 ／ モード</span><span>右のパネルで、次に生まれる細胞のモードを選ぶ。生まれた細胞はそれぞれ単独で動く。攻撃＝敵を探して撃ち、撃ち切ったら逃げて補給する（分裂しない）、防御＝防御以外の味方に付き添い、プラスミドを渡して守る、増殖＝敵を避けて養分を集め自分で増える。中心の印（▲ 盾 ＋）でモードが分かる。敵の株も同じ仕組みで動く</span></li>
       <li><span>成長</span><span>緑の粒（養分）を取り込むと細胞が大きくなり、プラスミドの容量が 3 → 5 → 7 → 9 個と増える。プラスミドが容量いっぱいのときは、養分を少し多く吸収して次の大きさへ早く育つ。縮むと、あふれたプラスミドは外へ出ていく</span></li>
       <li><span>プラスミド</span><span>細胞の中の、ハートが入った角丸の四角（薄い枠は空き）。自分では増えない。漂う白いプラスミドを拾うか、防御モードの味方から渡されたときだけ増える。外来のプラスミドが入っているときに拾うと、外来のものから優先して治る（枠がいっぱいでも拾える）。容量9の細胞が9個そろうと、4個と5個の2細胞に分裂する</span></li>
-      <li><span>F ／ 発射</span><span>元祖細胞から、自分の色のプラスミドを1つマウスの方向へ撃ち出す。当たった敵の細胞には、あなたの色のプラスミドが入り込む。外来のプラスミドが入った味方に当てると、それを1つ治す（治すものがない味方はすり抜ける）。外れたものは色つきのまましばらく漂う</span></li>
+      <li><span>F ／ 発射</span><span>元祖細胞から、自分の色のプラスミドを1つマウスの方向へ撃ち出す。当たった敵の細胞には、あなたの色のプラスミドが入り込む。味方に当てると、外来のプラスミドを1つ治す。外来がなければ空き枠に1つ補充する（どちらもない味方はすり抜ける）。外れたものは色つきのまましばらく漂う</span></li>
       <li><span>乗っ取り</span><span>細胞の中で他の色のプラスミドが自分の色より多くなると、その細胞はその陣営に寝返る。撃ち込まれた外来のプラスミドは、拾い直すか防御モードに治してもらうまで残る。色つきのものを拾うのも危険</span></li>
       <li><span>戦場の霧</span><span>見えるのは自分の細胞の周りだけ（元祖細胞は少し広い）。霧の外の敵の細胞・弾・色つきのプラスミドは見えない。全体マップは一度見た場所だけが明るくなる。養分・白いプラスミド・保護区はいつでも見える</span></li>
       <li><span>保護区</span><span>ときどき、一番弱い陣営の近くに計算盤の1マスが「保護区」として20秒だけ現れる（白い点線の正方形）。最初に入った陣営の色だけが入れ、他の色の細胞は押し出され、撃たれたプラスミドも跳ね返される</span></li>
@@ -1345,6 +1351,8 @@ const B62='0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ', B62I
 function enc(n,w){ n=Math.max(0,Math.min(62**w-1,Math.round(n))); let s=''; for(let i=0;i<w;i++){ s=B62[n%62]+s; n=Math.floor(n/62); } return s; }
 function dec(s,i,w){ let n=0; for(let k=0;k<w;k++) n=n*62+(B62I[s[i+k]]||0); return n; }
 const encP=v=>enc((v+DISH_R)*2,3), decP=(s,i)=>dec(s,i,3)/2-DISH_R;
+// 養分の位置は2文字（0〜3843）に詰めるので、シャーレの直径をその範囲に収める刻み幅
+const FQ=DISH_R*2/3800;
 const clampN=(v,a,b)=>Math.max(a,Math.min(b,Number(v)||0));
 function netEmit(topic,data){ if(RM.R) RM.R.emit(topic,data).catch(()=>{}); }
 
@@ -1390,7 +1398,7 @@ function sendSnap(){
 }
 function sendFood(){
   const s=++NET.foodSeq;
-  const all=foods.filter(f=>f.alive).map(f=>enc((f.x+DISH_R)/1.26,2)+enc((f.y+DISH_R)/1.26,2)).join('');
+  const all=foods.filter(f=>f.alive).map(f=>enc((f.x+DISH_R)/FQ,2)+enc((f.y+DISH_R)/FQ,2)).join('');
   const n=Math.max(1,Math.ceil(all.length/CHUNK));
   for(let i=0;i<n;i++) netEmit('food',{g:NET.g,s,i,n,d:all.slice(i*CHUNK,(i+1)*CHUNK)});
 }
@@ -1452,7 +1460,7 @@ function onFood(m){
   const d=m.data; if(!d || S.net!=='client' || d.g!==NET.g) return;
   const parts=gather('fbuf',d); if(!parts) return;
   const s=parts.map(p=>typeof p.d==='string'?p.d:'').join(''); foods=[];
-  for(let i=0;i+4<=s.length;i+=4) foods.push({x:dec(s,i,2)*1.26-DISH_R,y:dec(s,i+2,2)*1.26-DISH_R,v:1+(i%7)/5,alive:true,ph:i});
+  for(let i=0;i+4<=s.length;i+=4) foods.push({x:dec(s,i,2)*FQ-DISH_R,y:dec(s,i+2,2)*FQ-DISH_R,v:1+(i%7)/5,alive:true,ph:i});
 }
 function onEv(m){ const d=m.data; if(d && S.net==='client' && d.g===NET.g && d.to===ME) toast(String(d.msg||'').slice(0,40)); }
 function onEnd(m){
