@@ -300,7 +300,7 @@ const MIN_SPLIT = 36, P_MAX = 9, DNA_N = 130, CAP = Infinity, FOOD_N = 2800, MAT
 const FOOD_START = 880, FOOD_RAMP = 200;
 const MATCH_LABEL = `${MATCH_TIME/60}分`;
 // バージョン：BUILD は単体版を作るとき（build-standalone.js）に作成日時で置き換わる
-const APP_VERSION='2.1', BUILD='2026/10/29 00:23';
+const APP_VERSION='2.2', BUILD='2026/10/29 01:03';
 const versionLabel = () => `Ver ${APP_VERSION}`+(BUILD.startsWith('__')?'':`（${BUILD} 更新）`);
 const SPEED = 150;
 // プラスミドが容量いっぱいのときの養分の吸収率（次の容量へ育つ速さ）
@@ -328,15 +328,82 @@ function pickMode(f){
 }
 // AIの目標の割合：株ごとの性格（mix）をもとに、数が少ないうちは増殖、拠点が足りなければ攻撃、外来プラスミドが多ければ防御を増やす
 function aiMix(f){
-  const m={...FACTIONS[f].mix};
+  const m={...FACTIONS[f].mix}, P=aip(f);
   const n=counts[f]||0;
-  if(n<6) m.grow+=.35;
+  if(n<P.growN) m.grow+=P.growLow;
   const own=S && S.bases ? S.bases.filter(b=>b.owner===f).length : 0;
-  if(n>=6 && own<2) m.atk+=.18;
+  if(n>=P.growN && own<2) m.atk+=P.atkBase;
   let pl=0, fx=0; for(const c of cells) if(c.f===f) for(const q of c.pl){ pl++; if(q!==f) fx++; }
-  if(pl && fx/pl>.12) m.def+=.2;
+  if(pl && fx/pl>P.fxRatio) m.def+=P.defFx;
   if(S && S.spikes && S.spikes.length && n>=8) m.def+=.05;
   const t=m.atk+m.def+m.grow; return {atk:m.atk/t, def:m.def/t, grow:m.grow/t};
+}
+// ---------- AIの拠点の作戦 ----------
+// AIの陣営は数秒ごとに5つの拠点を見比べ、点数（価値・近さ・中の敵の数・取られかけているか）の高い拠点に、
+// 中の敵より多くなる数の子細胞（攻撃と防御）をまとめて送る。送られた細胞は拠点の中に居座る。
+// 取られかけている自分の拠点には助けを送り、取り終えた拠点は少しだけ残して他は解放する。
+// 難易度：強い＝判断が速い・敵+2の数で行く・数が集まるまで待つ・必ず守る・2か所を同時に狙う
+//         普通＝判断が遅い・敵+1の数・足りなくても行く・守るのは半分くらい・1か所ずつ
+// AIの数値（難易度ごと）。ml/ の自動調整はこの印のあいだを書き換える。学習中は __AIP_OVR[陣営] で差し替える
+// 拠点：every 判断の間隔(秒)・extra 敵より何個多く送るか・wait 0.5以上なら数がそろうまで待つ・defend 守りに行く確率・keep 残す数・
+//       targets 同時に狙う数・bigVal 大拠点の価値・defW/takeW 守る/取る点・distDef/distTake 距離で減る割合・enemyW 敵の数で減る割合・hold 任務の長さ(秒)
+// 割合：growLow 少ないうちの増殖の上乗せ・growN その境目の数・atkBase 拠点不足の攻撃の上乗せ・defFx 外来が多いときの防御の上乗せ・fxRatio その境目
+// 見直し：rbSkip 見直しを飛ばす確率・rbMin 切り替える足りなさの境目
+// 元祖細胞：spikeFire トゲを撃つ確率・spikeRange 撃つ距離・spikeFlee 逃げ始める距離・plR プラスミドを拾いに行く距離・homeBaseR/homeBaseP 自分の拠点へ寄る距離と確率
+// 増殖：growBaseR 元祖細胞からこの距離に自分の拠点があればその周りで育つ
+const AIP_DEF=/*AIP-BEGIN*/{
+  "strong":{"every":2,"extra":2,"wait":1,"defend":1,"keep":2,"targets":2,"bigVal":2.4,"defW":3,"takeW":1.6,"distDef":1500,"distTake":1200,"enemyW":0.25,"hold":45,"growLow":0.35,"growN":6,"atkBase":0.18,"defFx":0.2,"fxRatio":0.12,"rbSkip":0,"rbMin":1.5,"spikeFire":0.9,"spikeRange":460,"spikeFlee":320,"plR":450,"homeBaseR":1400,"homeBaseP":0.35,"growBaseR":900},
+  "normal":{"every":5,"extra":1,"wait":0,"defend":0.5,"keep":1,"targets":1,"bigVal":1.4,"defW":3,"takeW":1.6,"distDef":1500,"distTake":1200,"enemyW":0.25,"hold":45,"growLow":0.35,"growN":6,"atkBase":0.18,"defFx":0.2,"fxRatio":0.12,"rbSkip":0.5,"rbMin":1.5,"spikeFire":0.55,"spikeRange":460,"spikeFlee":320,"plR":450,"homeBaseR":1400,"homeBaseP":0.35,"growBaseR":900}
+}/*AIP-END*/;
+const aip = f => (typeof __AIP_OVR!=='undefined' && __AIP_OVR && __AIP_OVR[f]) || AIP_DEF[levelOf(f)] || AIP_DEF.normal;
+function aiBaseTick(dt){
+  if(!S.aiBt) S.aiBt=[0,0,0,0];
+  for(let f=0;f<4;f++){
+    if(human(f) || counts[f]<3) continue;
+    S.aiBt[f]-=dt; if(S.aiBt[f]>0) continue;
+    const P=aip(f); S.aiBt[f]=P.every*rand(.8,1.2);
+    const mine=cells.filter(c=>c.f===f && !c.leader && !c.dead);
+    // 時間切れの任務は解く
+    for(const c of mine) if(c.ord && c.ord.ai && S.t>c.ord.until) c.ord=null;
+    const home=S.leaders[f]||centroid(f); if(!home) continue;
+    const asg=S.bases.map(()=>0); for(const c of mine) if(c.ord && c.ord.ai) asg[c.ord.bid]++;
+    const cand=[];
+    for(const b of S.bases){
+      const n=[0,0,0,0], R=b.r*1.25;
+      query(cellGrid,b.x,b.y,R,c=>{ if(!c.dead && Math.hypot(c.x-b.x,c.y-b.y)<R) n[c.f]++; });
+      let en=0; for(let g=0;g<4;g++) if(g!==f) en=Math.max(en,n[g]);
+      const d=Math.hypot(b.x-home.x,b.y-home.y), val=b.big?P.bigVal:1;
+      if(b.owner===f){
+        const threat=en>0 && (en>=n[f] || b.prog<1);
+        if(threat && Math.random()<P.defend) cand.push({b, need:en+P.extra, score:P.defW*val-d/P.distDef});
+        else if(!threat && asg[b.i]>P.keep){
+          // 取り終えて落ち着いた拠点は、少しだけ残して解放する
+          let k=asg[b.i]-P.keep;
+          for(const c of mine) if(k>0 && c.ord && c.ord.ai && c.ord.bid===b.i){ c.ord=null; k--; }
+          asg[b.i]=P.keep;
+        }
+      } else cand.push({b, need:en+P.extra, score:P.takeW*val-d/P.distTake-en*P.enemyW});
+    }
+    cand.sort((a,b)=>b.score-a.score);
+    const pool=mine.filter(c=>!c.ord && c.mode!=='grow');
+    let used=0;
+    for(const T of cand){
+      if(used>=P.targets) break;
+      const want=T.need-asg[T.b.i];
+      if(want<=0){ used++; continue; }
+      const wait=P.wait>=.5;
+      pool.sort((a,b)=>Math.hypot(a.x-T.b.x,a.y-T.b.y)-Math.hypot(b.x-T.b.x,b.y-T.b.y));
+      // 強いAIは、敵より多くなる数がそろうまで攻めない（そろう拠点を次に探す）
+      if(wait && pool.length<want) continue;
+      const send=pool.splice(0,Math.round(want)); if(!send.length) continue;
+      for(const c of send){
+        const a=Math.random()*TAU, r=Math.sqrt(Math.random())*T.b.r*.6;
+        c.ord={t:'move', x:T.b.x+Math.cos(a)*r, y:T.b.y+Math.sin(a)*r, arr:false, ai:true, bid:T.b.i, lr:T.b.r*.85, until:S.t+P.hold};
+        c.wx=null; c.think=0; c.retreat=false; asg[T.b.i]++;
+      }
+      used++;
+    }
+  }
 }
 // AIの陣営は数秒ごとに子細胞のモードを見直し、足りないモードへ1つずつ切り替える（人がモードを変えられるのと同じ）
 function aiRebalance(dt){
@@ -344,13 +411,13 @@ function aiRebalance(dt){
   S.aiRb=3;
   for(let f=0;f<4;f++){
     if(human(f) || counts[f]<4) continue;
-    if(levelOf(f)!=='strong' && Math.random()<.5) continue;
+    const P=aip(f); if(Math.random()<P.rbSkip) continue;
     const have={atk:0,def:0,grow:0}, list=[];
     for(const c of cells) if(c.f===f && !c.leader && !c.dead){ have[c.mode]++; list.push(c); }
     const want=aiMix(f), n=list.length;
     let lo=null, hi=null, ld=0, hd=0;
     for(const k of ['atk','def','grow']){ const d=want[k]*n-have[k]; if(d>ld){ ld=d; lo=k; } if(-d>hd){ hd=-d; hi=k; } }
-    if(!lo || !hi || ld<1.5) continue;
+    if(!lo || !hi || ld<P.rbMin) continue;
     const c=list.find(o=>o.mode===hi && !(hi==='atk' && !o.retreat && ownCount(o)>=2)) || list.find(o=>o.mode===hi);
     if(c){ c.mode=lo; c.retreat=false; c.ally=null; c.think=0; }
   }
@@ -581,9 +648,10 @@ function steerAI(c,dt){
   // 空き枠があれば、近くの取り込めるプラスミド（白か自分の色）を拾って分裂の元にする。
   // 見当たらなければ、自分の色のプラスミドが湧く自分の拠点へときどき寄る。それ以外は養分を食べて育つ
   if(c.pl.length<holdCap(c)){
-    const dn=nearestPlasmid(c); if(dn && (dn.x-c.x)**2+(dn.y-c.y)**2<450*450){ setDir(c,dn.x-c.x,dn.y-c.y); return; }
-    const hb=nearestBase(c,b=>b.owner===c.f,1400);
-    if(hb && Math.hypot(hb.x-c.x,hb.y-c.y)>hb.r && Math.random()<.35){ setDir(c,hb.x-c.x+rand(-80,80),hb.y-c.y+rand(-80,80)); return; }
+    const P=aip(c.f);
+    const dn=nearestPlasmid(c); if(dn && (dn.x-c.x)**2+(dn.y-c.y)**2<P.plR*P.plR){ setDir(c,dn.x-c.x,dn.y-c.y); return; }
+    const hb=nearestBase(c,b=>b.owner===c.f,P.homeBaseR);
+    if(hb && Math.hypot(hb.x-c.x,hb.y-c.y)>hb.r && Math.random()<P.homeBaseP){ setDir(c,hb.x-c.x+rand(-80,80),hb.y-c.y+rand(-80,80)); return; }
   }
   seekFood(c);
 }
@@ -592,8 +660,9 @@ function aiSpike(c){
   let k=null, kd=1e9;
   for(const o of S.spikes){ const d=Math.hypot(c.x-o.x,c.y-o.y); if(d<kd){ kd=d; k=o; } }
   if(!k || kd>700) return false;
-  if(kd<460 && c.fireCd<=0 && canFire(c) && Math.random()<(aiStrong(c)?.9:.55)) fire(c,k.x-c.x,k.y-c.y);
-  if(kd>k.r+c.r+320) return false;
+  const P=aip(c.f);
+  if(kd<P.spikeRange && c.fireCd<=0 && canFire(c) && Math.random()<P.spikeFire) fire(c,k.x-c.x,k.y-c.y);
+  if(kd>k.r+c.r+P.spikeFlee) return false;
   const m=centroid(c.f); let dx=c.x-k.x, dy=c.y-k.y; const l=Math.hypot(dx,dy)||1;
   dx/=l; dy/=l;
   if(m){ const mx=m.x-c.x, my=m.y-c.y, ml=Math.hypot(mx,my)||1; if(mx/ml*dx+my/ml*dy>-.2){ dx+=mx/ml*.6; dy+=my/ml*.6; } }
@@ -792,17 +861,18 @@ function steerAttack(c,dt){
     // 撃ち切って危ないときは、入れる保護区があれば逃げ込む
     const sg=sanctGoal(c, near && nd<500);
     if(sg){ setDir(c,sg.x-c.x,sg.y-c.y); return; }
-    if(near && nd<500){ setDir(c,c.x-near.x,c.y-near.y); return; }
-    if(A) seekFood(c,A,ANCHOR_R.atk); else seekFood(c); return;
+    // 拠点を任されているときは、弾がなくても逃げずに居座る（拠点は中にいる数で取り合う）
+    if(near && nd<500 && !(A && A.ai)){ setDir(c,c.x-near.x,c.y-near.y); return; }
+    if(A) seekFood(c,A,leashOf(A,'atk')); else seekFood(c); return;
   }
   // 旗があれば、その範囲から離れすぎたら戻る
-  if(A && Math.hypot(A.x-c.x,A.y-c.y)>ANCHOR_R.atk){ setDir(c,A.x-c.x,A.y-c.y); return; }
+  if(A && Math.hypot(A.x-c.x,A.y-c.y)>leashOf(A,'atk')){ setDir(c,A.x-c.x,A.y-c.y); return; }
   if(near){
     if(nd<360 && c.fireCd<=0) fire(c,near.x-c.x,near.y-c.y);
     const dx=near.x-c.x, dy=near.y-c.y, k=nd>260?1:-.6;
     setDir(c,dx*k-dy*.35,dy*k+dx*.35); return;
   }
-  if(A){ seekFood(c,A,ANCHOR_R.atk*.6); return; }
+  if(A){ seekFood(c,A,leashOf(A,'atk')*.6); return; }
   // 旗がないときは、自分のものでない拠点を取りに行く
   const tb=nearestBase(c,b=>b.owner!==c.f,1800);
   if(tb && Math.hypot(tb.x-c.x,tb.y-c.y)>tb.r*.5){ setDir(c,tb.x-c.x+rand(-60,60),tb.y-c.y+rand(-60,60)); return; }
@@ -814,7 +884,9 @@ const GROW_R=DISH_R/2;
 function steerGrow(c,dt){
   c.think-=dt; if(c.think>0) return;
   c.think=rand(.2,.35);
-  const A=anchorOf(c), L=A||ownerLeader(c), LR=A?ANCHOR_R.grow:GROW_R;
+  const A=anchorOf(c); let L=A||ownerLeader(c), LR=A?leashOf(A,'grow'):GROW_R;
+  // AIの増殖は、元祖細胞の近くに自分の拠点があればその周りで育つ（自分の色のプラスミドが湧き、数で居座れる）
+  if(!A && L && !human(c.f)){ const hb=nearestBase(L,b=>b.owner===c.f,aip(c.f).growBaseR); if(hb){ L=hb; LR=Math.max(hb.r*1.6,480); } }
   let near=null,nd=1e9;
   query(cellGrid,c.x,c.y,260,o=>{
     if(o.dead||o.f===c.f) return;
@@ -849,7 +921,7 @@ function steerDefend(c,dt,L){
   }
   // 旗があれば、その範囲から離れすぎたら戻る（範囲の中で味方を守る）
   const A=anchorOf(c);
-  if(A && Math.hypot(A.x-c.x,A.y-c.y)>ANCHOR_R.def){ setDir(c,A.x-c.x,A.y-c.y); return; }
+  if(A && Math.hypot(A.x-c.x,A.y-c.y)>leashOf(A,'def')){ setDir(c,A.x-c.x,A.y-c.y); return; }
   // 余り（DEF_KEEP 個を超えた分）があり、撃っても自分が乗っ取られないときだけ撃てる
   const canGive=ownCount(c)>DEF_KEEP && canFire(c);
   const a=c.ally;
@@ -1067,6 +1139,8 @@ function update(dt){
   for(const dn of dnas){
     if(dn.f>=0){
       const k=Math.exp(-dt*2); dn.x+=dn.vx*dt; dn.y+=dn.vy*dt; dn.vx*=k; dn.vy*=k;
+      // シャーレの壁に当たったら、壁ぎわで止まる（外へは出ない）
+      const dd=Math.hypot(dn.x,dn.y), lm=DISH_R-10; if(dd>lm){ dn.x*=lm/dd; dn.y*=lm/dd; dn.vx=0; dn.vy=0; }
       dn.ttl-=dt; if(dn.ttl<=0) dn.alive=false;
     }
     if(!dn.alive){
@@ -1131,6 +1205,7 @@ function update(dt){
   spikeTick(dt);
   baseTick(dt);
   aiRebalance(dt);
+  aiBaseTick(dt);
   for(let p=0;p<S.swCd.length;p++) S.swCd[p]=Math.max(0,S.swCd[p]-dt);
 
   for(const p of parts){ p.x+=p.vx*dt; p.y+=p.vy*dt; p.vx*=.94; p.vy*=.94; p.life-=dt; }
@@ -1443,6 +1518,20 @@ function modeGlyph(g,m,x,y,s){
   else { const t=s*.25; g.moveTo(x-t,y-s); g.lineTo(x+t,y-s); g.lineTo(x+t,y-t); g.lineTo(x+s,y-t); g.lineTo(x+s,y+t); g.lineTo(x+t,y+t); g.lineTo(x+t,y+s); g.lineTo(x-t,y+s); g.lineTo(x-t,y+t); g.lineTo(x-s,y+t); g.lineTo(x-s,y-t); g.lineTo(x-t,y-t); }
   g.closePath(); g.fill();
 }
+// マップでの自分の細胞の印：子細胞はモードのマーク（▲ 盾 ＋）、元祖細胞は王冠。縁取りで背景から浮かせる
+const isMine = c => !S.demo && MP>=0 && c.f===ME && c.pid===MP;
+function mapMark(g,c,x,y,s){
+  g.save(); g.lineJoin='round';
+  if(c.leader){
+    const w=s*1.25, h=s*.95;
+    g.beginPath(); g.moveTo(x-w,y+h*.6); g.lineTo(x-w,y-h*.5); g.lineTo(x-w*.5,y); g.lineTo(x,y-h); g.lineTo(x+w*.5,y); g.lineTo(x+w,y-h*.5); g.lineTo(x+w,y+h*.6); g.closePath();
+    g.lineWidth=2.5; g.strokeStyle=C.bg; g.stroke(); g.fillStyle=C.crown; g.fill();
+  } else {
+    g.fillStyle=C.bg; modeGlyph(g,c.mode,x,y,s+1.4);
+    g.fillStyle=FACTIONS[c.f].color; modeGlyph(g,c.mode,x,y,s);
+  }
+  g.restore();
+}
 // プラスミドの形：角丸の四角（半径 h の正方形）の中にハート
 function plasmidFrame(x,y,h){
   const r=h*.42;
@@ -1490,11 +1579,15 @@ function drawMap(){
     if(sz.owner>=0){ g.globalAlpha=.25; g.fillStyle=col; g.fillRect(cx+sz.x*sc,cy+sz.y*sc,sz.s*sc,sz.s*sc); g.globalAlpha=1; }
     g.strokeStyle=col; g.lineWidth=1.5; g.strokeRect(cx+sz.x*sc,cy+sz.y*sc,sz.s*sc,sz.s*sc);
   }
+  const mineL=[];
   for(const c of cells){
     if(c.f!==ME && !seen(c.x,c.y,c.r)) continue;
+    if(isMine(c)){ mineL.push(c); continue; }
     g.fillStyle=FACTIONS[c.f].color;
     g.beginPath(); g.arc(cx+c.x*sc,cy+c.y*sc,Math.max(1.6,c.r*sc),0,TAU); g.fill();
   }
+  // 自分の細胞は他より上に、マークで描く
+  for(const c of mineL) mapMark(g,c,cx+c.x*sc,cy+c.y*sc,Math.max(3.2,c.r*sc*1.3));
   for(const k of S.spikes){ g.fillStyle=C.spike; g.strokeStyle=C.bg; g.lineWidth=1; g.beginPath(); g.arc(cx+k.x*sc,cy+k.y*sc,4,0,TAU); g.fill(); g.stroke(); }
   for(const b of S.bases){ g.strokeStyle=b.owner>=0?FACTIONS[b.owner].color:C.dim; g.lineWidth=1.5; g.beginPath(); g.arc(cx+b.x*sc,cy+b.y*sc,Math.max(3,b.r*sc),0,TAU); g.stroke(); }
   if(!S.demo || S.watch){
@@ -1673,6 +1766,8 @@ function drawBase(b,z){
 // 停止（命令を消して自動に戻る）・モード変更を出す。命令はプレイヤーごとで、その人の細胞だけが従う。
 // 子細胞は着いた場所から ANCHOR_R（モードごと）以上は離れない。元祖細胞は着いたらその周りで養分を食べて待つ
 const ANCHOR_R={atk:650, def:450, grow:350}, WID=238328;
+// 集合地点から離れてよい距離（拠点を任されたAIの細胞は、その拠点の中＝lr）
+const leashOf = (A,m) => A && A.lr || ANCHOR_R[m];
 const wid = c => c.id%WID;
 // この細胞が受け持つ集合地点（移動の命令で着いた場所。なければ null）
 function anchorOf(c){ return c.ord && c.ord.t==='move' && c.ord.arr ? c.ord : null; }
@@ -1701,6 +1796,7 @@ function steerOrder(c){
   const o=c.ord;
   if(o.t==='move'){
     if(o.arr) return false;
+    if(o.ai && spikeFlee(c)) return true;
     const dx=o.x-c.x, dy=o.y-c.y, d=Math.hypot(dx,dy);
     if(d<Math.max(28,c.r*.7)){ o.arr=true; if(c.leader){ c.home={x:o.x,y:o.y}; c.ord=null; } return false; }
     const k=Math.min(1,d/90); c.dx=dx/d*k; c.dy=dy/d*k; return true;
@@ -1777,11 +1873,12 @@ function drawBigMap(){
   const sz=S.sanct; if(sz){ g.strokeStyle=sz.owner>=0?FACTIONS[sz.owner].color:C.ink; g.lineWidth=1.5; g.strokeRect(tx(sz.x),ty(sz.y),sz.s*sc,sz.s*sc); }
   for(const c of cells){
     if(c.f!==ME && !seen(c.x,c.y,c.r)) continue;
+    if(isMine(c)) continue;
     g.fillStyle=FACTIONS[c.f].color; g.globalAlpha=c.f===ME?1:.75;
     g.beginPath(); g.arc(tx(c.x),ty(c.y),Math.max(2.2,c.r*sc),0,TAU); g.fill();
-    if(c.f===ME && !c.leader && c.r*sc>3.5){ g.fillStyle=C.bg; modeGlyph(g,c.mode,tx(c.x),ty(c.y),Math.max(1.6,c.r*sc*.5)); }
   }
   g.globalAlpha=1;
+  for(const c of cells) if(isMine(c)) mapMark(g,c,tx(c.x),ty(c.y),Math.max(5,c.r*sc*1.2));
   const L=MP>=0?S.pleaders[MP]:null;
   for(const k of S.spikes){ g.fillStyle=C.spike; g.strokeStyle=C.bg; g.lineWidth=1.5; g.beginPath(); g.arc(tx(k.x),ty(k.y),Math.max(4,k.r*sc),0,TAU); g.fill(); g.stroke(); }
   for(const c of cells) if(SEL.has(wid(c)) && c.f===ME){ g.strokeStyle=C.ink; g.lineWidth=1.5; g.beginPath(); g.arc(tx(c.x),ty(c.y),Math.max(4,c.r*sc+3),0,TAU); g.stroke(); }
@@ -2011,10 +2108,11 @@ const HOWTO=[
    ['防御 盾','自分の色を3個残し、余りを味方に撃って治す・補充する'],
    ['増殖 ＋','元祖細胞の近くで、敵を避けて養分とプラスミドを集める'],
    ['数の上限','なし。いくらでも増やせる']],
-  [['拠点','5か所（中心は大拠点）。中にいる細胞の数が一番多い陣営がゲージを進めて取る。持ち主の色のプラスミドが周りに湧く'],
+  [['拠点','5か所（中心は大拠点）。中にいる細胞の数が一番多い陣営がゲージを進めて取る。持ち主の色のプラスミドが周りに湧く。AIも数をそろえて取りに来て、取られかけると守りに来る（強いAIほど素早く、数をそろえてから来る）'],
    ['白いトゲ','2分後から1分ごとに中心に湧き、バイオマス上位2陣営の元祖細胞を1.5倍の速さで追う。触れた細胞は死ぬ。体力3：細胞にぶつかるか元祖細胞の弾が当たるたびに1減る'],
    ['保護区','一番弱い陣営の近くに20秒だけ出る正方形。最初に入った色だけが入れ、中は養分とプラスミドが2倍'],
    ['戦場の霧','見えるのは自分の細胞の周りだけ。全体マップは一度見た場所だけ明るくなる'],
+   ['壁','撃ったプラスミドやあふれたプラスミドは、シャーレの壁に当たるとそこで止まる'],
    ['チーム戦','オンラインでは同じ色に何人でも座れる。それぞれが自分の元祖細胞と、自分が生んだ細胞を操作する']],
 ];
 // AIの強さの選択欄（タイトル画面と、オンラインのホストのルーム画面）
@@ -2642,6 +2740,8 @@ function frame(now){
   if(toastT>0){ toastT-=dt; if(toastT<=0) toastEl.classList.remove('show'); }
   requestAnimationFrame(frame);
 }
+// 学習用の入口：ml/sim.js が __SIM_HOOK を渡したときだけ、画面なしで試合を進める関数を渡す
+if(typeof __SIM_HOOK==='function') __SIM_HOOK({AIP_DEF, setLv:l=>{ watchLv=l.slice(); }, start:()=>newGame(true,true), step:dt=>update(dt), S:()=>S, counts:()=>counts, cells:()=>cells});
 newGame(true);
 showTitle();
 requestAnimationFrame(frame);
