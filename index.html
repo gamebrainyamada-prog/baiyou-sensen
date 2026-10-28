@@ -27,6 +27,9 @@
   --fog:rgba(2,5,7,.84);
   --crown:#ffd866;
   --spike:#f4f7f9;
+  --flag-atk:#ff9a62;
+  --flag-def:#7cc6ff;
+  --flag-grow:#a6e57e;
   --food:#cfe8b8;
   --dna:#f3f6ff;
   --warn:#ff4d5e;
@@ -94,6 +97,14 @@ body{background:var(--bg);color:var(--ink);font-family:var(--f-body);-webkit-use
 .note{margin:0;color:var(--dim);font-size:13px;line-height:1.6}
 .btn.ghost{background:transparent;color:var(--ink);border:1px solid var(--panel-line)}
 .ai-seg{max-width:220px}
+.ver{color:var(--dim);font-size:10px;letter-spacing:.08em}
+#update-bar{position:absolute;left:50%;top:calc(10px + env(safe-area-inset-top,0px));transform:translateX(-50%);display:flex;align-items:center;gap:10px;padding:8px 12px;border:1px solid var(--f0);border-radius:8px;background:var(--panel);font-size:13px;max-width:calc(100% - 24px)}
+#bigmap{position:absolute;inset:0;display:grid;grid-template-rows:auto minmax(0,1fr) auto;gap:8px;padding:12px;background:rgba(4,7,10,.86)}
+#bm-cv{width:100%;height:100%;min-height:0;display:block;cursor:crosshair;touch-action:none}
+.bm-tools button{font-size:12px;padding:6px 10px}
+.bm-foot{display:flex;flex-wrap:wrap;align-items:center;gap:8px}
+.bm-hint{margin:0;flex:1 1 260px;color:var(--dim);font-size:12px;line-height:1.5}
+#map{cursor:zoom-in}
 .lvrows{display:grid;gap:4px}
 .lvrow{display:grid;grid-template-columns:8px minmax(0,1fr) auto;align-items:center;gap:6px;font-family:var(--f-body);font-size:11px}
 .lvrow i{width:8px;height:8px;border-radius:50%}
@@ -174,13 +185,22 @@ h1 .sub{display:block;font-size:.3em;color:var(--dim);letter-spacing:.3em;margin
     <canvas id="cv"></canvas>
     <div id="touch">
       <button id="b-fire" type="button">発射</button>
+      <button id="b-map" type="button">マップ</button>
     </div>
     <div id="toast"></div>
+    <div id="update-bar" hidden><span id="update-text"></span><button type="button" class="btn small" id="update-reload">再読み込み</button></div>
+    <div id="bigmap" hidden>
+      <div class="bm-tools seg" id="bm-tools">
+        <button type="button" data-tool="atk">攻撃の旗</button><button type="button" data-tool="def">防御の旗</button><button type="button" data-tool="grow">増殖の旗</button><button type="button" data-tool="switch">乗り換え</button><button type="button" data-tool="erase">旗を1つ消す</button>
+      </div>
+      <canvas id="bm-cv"></canvas>
+      <div class="bm-foot"><p class="bm-hint" id="bm-hint"></p><button type="button" class="quit" id="bm-clear">旗を全部消す</button><button type="button" class="quit" id="bm-close">閉じる（M）</button></div>
+    </div>
   </div>
 
   <aside id="side">
     <section class="sec" id="sec-time">
-      <div id="timer">6:00</div>
+      <div id="timer">10:00</div>
       <div class="stats" id="my-stats">
         <span>細胞数</span><b><span id="s-cells">0</span> / <span id="s-cap">100</span></b>
         <span>バイオマス</span><b id="s-mass">0</b>
@@ -223,7 +243,7 @@ h1 .sub{display:block;font-size:.3em;color:var(--dim);letter-spacing:.3em;margin
 
     <section class="sec" id="sec-map">
       <div class="hud-title">全体マップ</div>
-      <canvas id="map"></canvas>
+      <canvas id="map" title="クリックで大きく開く（M）"></canvas>
     </section>
 
     <section class="sec" id="sec-fac">
@@ -234,7 +254,8 @@ h1 .sub{display:block;font-size:.3em;color:var(--dim);letter-spacing:.3em;margin
 
     <section class="sec keys" id="sec-keys">
       <div class="hud-title">操作</div>
-      <div>マウス：元祖細胞（点線の輪）が泳ぐ方向<br><kbd>F</kbd>／右クリック 発射　<kbd>1</kbd><kbd>2</kbd><kbd>3</kbd> モード</div>
+      <div class="ver" id="ver-label"></div>
+      <div>マウス：元祖細胞（点線の輪）が泳ぐ方向<br><kbd>F</kbd>／右クリック 発射　<kbd>1</kbd><kbd>2</kbd><kbd>3</kbd> モード<br><kbd>M</kbd> 全体マップ（旗・乗り換え）</div>
     </section>
 
     <section class="sec" id="sec-quit" hidden>
@@ -253,7 +274,7 @@ h1 .sub{display:block;font-size:.3em;color:var(--dim);letter-spacing:.3em;margin
 const cv = document.getElementById('cv'), ctx = cv.getContext('2d');
 const css = getComputedStyle(document.documentElement);
 const tok = n => css.getPropertyValue(n).trim();
-const C = {bg:tok('--bg'), dish:tok('--dish'), rim:tok('--rim'), grid:tok('--grid'), gridS:tok('--grid-strong'), food:tok('--food'), dna:tok('--dna'), warn:tok('--warn'), ink:tok('--ink'), dim:tok('--dim'), side:tok('--side'), fog:tok('--fog'), crown:tok('--crown'), spike:tok('--spike')};
+const C = {bg:tok('--bg'), dish:tok('--dish'), rim:tok('--rim'), grid:tok('--grid'), gridS:tok('--grid-strong'), food:tok('--food'), dna:tok('--dna'), warn:tok('--warn'), ink:tok('--ink'), dim:tok('--dim'), side:tok('--side'), fog:tok('--fog'), crown:tok('--crown'), spike:tok('--spike'), flagAtk:tok('--flag-atk'), flagDef:tok('--flag-def'), flagGrow:tok('--flag-grow')};
 
 const FACTIONS = [
   // mix：AI陣営（とデモ中のシアン株）が子細胞に割り当てるモードの比率
@@ -264,10 +285,13 @@ const FACTIONS = [
 ];
 const TAU = Math.PI*2;
 const DISH_R = 2900, GRID = 160, GN = Math.ceil(DISH_R*2/GRID)+1;
-const MIN_SPLIT = 36, P_MAX = 9, DNA_N = 130, CAP = 100, FOOD_N = 2800, MATCH_TIME = 360;
+const MIN_SPLIT = 36, P_MAX = 9, DNA_N = 130, CAP = 100, FOOD_N = 2800, MATCH_TIME = 600;
 // 養分は最初 FOOD_START 個だけ。残りは FOOD_RAMP 秒かけて少しずつ湧いて FOOD_N 個まで増える
 const FOOD_START = 880, FOOD_RAMP = 200;
 const MATCH_LABEL = `${MATCH_TIME/60}分`;
+// バージョン：BUILD は単体版を作るとき（build-standalone.js）に作成日時で置き換わる
+const APP_VERSION='2.0', BUILD='2026/10/28 22:28';
+const versionLabel = () => `Ver ${APP_VERSION}`+(BUILD.startsWith('__')?'':`（${BUILD} 更新）`);
 const SPEED = 150;
 // プラスミドが容量いっぱいのときの養分の吸収率（次の容量へ育つ速さ）
 const FULL_BONUS = 1.2;
@@ -285,12 +309,26 @@ const holdCap = c => c.mode==='atk' && !c.leader ? Math.min(capOf(c.mass),P_MAX-
 // 次の分裂で生まれる細胞のモード（atk / def / grow）。プレイヤーが選ぶ
 let selMode='grow';
 function pickMode(f){ const m=FACTIONS[f].mix; let r=Math.random(); for(const k in m){ r-=m[k]; if(r<=0) return k; } return 'grow'; }
-// 人が操作する陣営と、その入力。この画面の操作は INP[ME] に、オンラインの参加者の操作は presence から入る
-let ME=0, HUM=[true,false,false,false], NAMES=['','','',''];
-const blankInput=()=>({x:0,y:0,fi:0,m:'grow'});
-let INP=[0,1,2,3].map(blankInput), SEEN=[0,1,2,3].map(()=>({fi:0}));
+// 人（プレイヤー）の一覧 PL と、その入力 INP（プレイヤーごと）。同じ色（陣営）に何人でも入れる＝チーム。
+// MP＝この画面のプレイヤー番号、ME＝その陣営（-1 は観戦）。HUM＝人がいる陣営、NAMES＝陣営ごとの名前（チームは「・」でつなぐ）
+let PL=[{f:0,name:'',gone:false}], MP=0, ME=0, HUM=[true,false,false,false], NAMES=['','','',''];
+function refreshTeams(){
+  HUM=[0,1,2,3].map(f=>PL.some(p=>p.f===f && !p.gone));
+  NAMES=[0,1,2,3].map(f=>PL.filter(p=>p.f===f && !p.gone).map(p=>p.name).filter(Boolean).join('・'));
+}
+const blankInput=()=>({x:0,y:0,fi:0,m:'grow',sw:null});
+let INP=[blankInput()], SEEN=[{fi:0,sw:0}];
 const human = f => !S.demo && HUM[f];
-const modeFor = f => human(f) ? INP[f].m : pickMode(f);
+// 細胞のモード：人のプレイヤーの子細胞はその人が選んでいるモード、それ以外は陣営の割合で
+const modeOf = c => c.pid>=0 && human(c.f) && INP[c.pid] ? INP[c.pid].m : pickMode(c.f);
+// その細胞を受け持つプレイヤーの元祖細胞（なければ陣営の元祖細胞）
+const ownerLeader = c => c.pid>=0 && S.pleaders && S.pleaders[c.pid] ? S.pleaders[c.pid] : S.leaders[c.f];
+// 陣営 f のプレイヤーのうち、細胞 c に一番近い元祖細胞を持つ人（いなければその陣営の最初の人、人がいなければ -1）
+function nearestPid(f,c){
+  let best=-1, bd=1e18;
+  PL.forEach((p,k)=>{ if(p.gone || p.f!==f) return; const L=S.pleaders && S.pleaders[k]; const d=L ? (L.x-c.x)**2+(L.y-c.y)**2 : 1e17; if(d<bd){ bd=d; best=k; } });
+  return best;
+}
 // AIの陣営は全体の能力（速さ・発射の間隔）を0.9倍にする
 // AIの強さ：'normal'＝普通（能力0.9倍・攻撃は自分の視界の中だけ）、'strong'＝強い（以前のAI：能力1.0倍・攻撃は約700まで探す・
 // 元祖細胞が大きくなると自分で分裂する）。人が操作する陣営の細胞には効かない。選んだ値はこの画面に覚えておく
@@ -330,12 +368,14 @@ if(window.ResizeObserver) new ResizeObserver(resize).observe(stage);
 let cells=[], foods=[], dnas=[], shots=[], parts=[], zones=[], S, counts=[0,0,0,0], cellGrid, foodGrid, uid=0;
 
 // demo：タイトル背景の自動対戦。watch：AI同士の観戦（demo と同じく全陣営AIだが、時間制限と結果がある）
-// opts（オンライン対戦用）：net='host'|'client'、me＝この画面の陣営（-1 は観戦）、hum＝人が操作する陣営、names＝名前
+// opts（オンライン対戦用）：net='host'|'client'、players＝[{f,name}]（同じ f が複数あればチーム）、mp＝この画面のプレイヤー番号（-1 は観戦）
 function newGame(demo, watch=false, opts={}){
   cells=[]; foods=[]; dnas=[]; shots=[]; parts=[]; zones=[];
-  ME = opts.me ?? 0; HUM = opts.hum || [true,false,false,false]; NAMES = opts.names || ['','','',''];
-  INP=[0,1,2,3].map(blankInput); SEEN=[0,1,2,3].map(()=>({fi:0}));
-  S = {t:0, time:MATCH_TIME, over:false, demo, watch, net:opts.net||null, nameNo:[0,0,0,0], follow:-1, speed:1, nextZone:18, sanct:null, nextSanct:45, sanctId:0, spikes:[], spikeId:0, nextSpikeAt:SPIKE_AT, eaten:0, peak:0, splits:0, dnaGot:0, converted:0, hijacked:0,
+  PL = demo ? [] : (opts.players || [{f:0,name:''}]).map(p=>({f:Math.min(3,Math.max(0,p.f|0)), name:cleanName(p.name), gone:false}));
+  MP = demo ? -1 : (opts.mp ?? 0); ME = MP>=0 && PL[MP] ? PL[MP].f : -1;
+  refreshTeams();
+  INP=PL.map(blankInput); SEEN=PL.map(()=>({fi:0,sw:0}));
+  S = {t:0, time:MATCH_TIME, over:false, demo, watch, net:opts.net||null, nameNo:[0,0,0,0], follow:-1, speed:1, nextZone:18, sanct:null, nextSanct:45, sanctId:0, spikes:[], spikeId:0, nextSpikeAt:SPIKE_AT, bases:makeBases(), flags:PL.map(emptyFlags), flagVer:PL.map(()=>({atk:0,def:0,grow:0})), swCd:PL.map(()=>0), pleaders:PL.map(()=>null), pmass:PL.map(()=>0), eaten:0, peak:0, splits:0, dnaGot:0, converted:0, hijacked:0,
        cam:{x:0,y:0,z:demo?0.32:0.9}, mass:[0,0,0,0], out:[false,false,false,false], leaders:[null,null,null,null]};
   for(let i=0;i<FOOD_N;i++){
     const [x,y]=randInDish(20), late=i>=FOOD_START;
@@ -344,17 +384,21 @@ function newGame(demo, watch=false, opts={}){
   for(let i=0;i<DNA_N;i++){ const [x,y]=randInDish(40); dnas.push({x,y,f:-1,alive:true,respawn:0,ph:Math.random()*TAU}); }
   FACTIONS.forEach((f,i)=>{
     const a=i*Math.PI/2+Math.PI/4, d=DISH_R*0.62, cx=Math.cos(a)*d, cy=Math.sin(a)*d;
-    // 各陣営は元祖細胞1つから始まる
-    S.leaders[i]=addCell(i, cx, cy, 40);
-    S.leaders[i].leader=true;
+    // 各陣営は元祖細胞1つから始まる。人の陣営はプレイヤーごとに1つ（チームなら少しずらして並べる）
+    const ps=PL.map((p,k)=>k).filter(k=>PL[k].f===i);
+    if(!ps.length){ S.leaders[i]=addCell(i, cx, cy, 40); S.leaders[i].leader=true; }
+    else ps.forEach((k,j)=>{
+      const a2=j/ps.length*TAU, off=ps.length>1?80:0, c=addCell(i, cx+Math.cos(a2)*off, cy+Math.sin(a2)*off, 40);
+      c.leader=true; c.pid=k; S.pleaders[k]=c; if(!S.leaders[i]) S.leaders[i]=c;
+    });
   });
-  if(!demo && ME>=0){ S.cam.x=S.leaders[ME].x; S.cam.y=S.leaders[ME].y; }
+  if(!demo && MP>=0 && S.pleaders[MP]){ S.cam.x=S.pleaders[MP].x; S.cam.y=S.pleaders[MP].y; }
   buildFrows();
   explored=new Uint8Array(FOG_N*FOG_N); mine=[];
 }
 
 function addCell(f,x,y,m,pl){
-  const c={id:uid++,f,x,y,pl:pl||[f,f],pt:rand(2,4.5),fireCd:0,mode:'grow',leader:false,no:0,ally:null,giveCd:0,vx:0,vy:0,ix:0,iy:0,dx:0,dy:0,mass:m,r:rad(m),splitCd:1.5,fuseCd:3,pop:0,
+  const c={id:uid++,f,x,y,pl:pl||[f,f],pt:rand(2,4.5),fireCd:0,mode:'grow',leader:false,no:0,pid:-1,ally:null,giveCd:0,vx:0,vy:0,ix:0,iy:0,dx:0,dy:0,mass:m,r:rad(m),splitCd:1.5,fuseCd:3,pop:0,
            seed:Math.random()*10,axis:Math.random()*TAU,think:Math.random()*.3,wx:null,wy:null,dead:false};
   cells.push(c); return c;
 }
@@ -388,7 +432,7 @@ function divide(c,dx,dy,power,force){
   shuffle(c.pl);
   const n=addCell(c.f, c.x+dx*c.r, c.y+dy*c.r, c.mass, c.pl.splice(0,Math.floor(c.pl.length/2)));
   c.pt=n.pt=rand(3,4.5);
-  n.mode=modeFor(c.f); n.no=++S.nameNo[c.f];
+  n.pid=c.pid; n.mode=modeOf(n); n.no=++S.nameNo[c.f];
   n.ix=dx*power; n.iy=dy*power; c.ix-=dx*power*.15; c.iy-=dy*power*.15;
   c.splitCd=n.splitCd=1.2; c.fuseCd=n.fuseCd=4; n.dx=c.dx; n.dy=c.dy; n.axis=Math.atan2(dy,dx);
   counts[c.f]++;
@@ -412,7 +456,7 @@ function checkConvert(c){
   if(best===c.f) return;
   // 乗っ取る側が上限に達していたら、寝返らずに溶菌する
   if(counts[best]>=CAP){ kill(c); return; }
-  const from=c.f; c.f=best; counts[from]--; counts[best]++; c.leader=false; c.mode=modeFor(best); c.no=++S.nameNo[best]; c.ally=null;
+  const from=c.f; c.f=best; counts[from]--; counts[best]++; c.leader=false; c.pid=human(best)?nearestPid(best,c):-1; c.mode=modeOf(c); c.no=++S.nameNo[best]; c.ally=null;
   c.pop=Math.min(c.pop,.5); c.think=0; c.wx=null;
   burst(c.x,c.y,FACTIONS[best].color,8,90);
   if(!S.demo){
@@ -436,7 +480,8 @@ function fire(c,dx,dy){
   const i=c.pl.lastIndexOf(c.f);
   c.pl.splice(i,1);
   const l=Math.hypot(dx,dy)||1; dx/=l; dy/=l;
-  shots.push({x:c.x+dx*c.r,y:c.y+dy*c.r,vx:dx*720+c.vx*.5,vy:dy*720+c.vy*.5,f:c.f,from:c.id,life:1.1,hit:false});
+  // pl：人のプレイヤーの元祖細胞が撃った弾ならその番号（白いトゲに効くのはこの弾だけ）
+  shots.push({x:c.x+dx*c.r,y:c.y+dy*c.r,vx:dx*720+c.vx*.5,vy:dy*720+c.vy*.5,f:c.f,from:c.id,pl:(c.leader && c.pid>=0 && human(c.f))?c.pid:-1,life:1.1,hit:false});
   c.fireCd=.45/aiK(c);
   checkConvert(c);
   return true;
@@ -452,7 +497,7 @@ function burst(x,y,color,n,sp){
 // ---------- steering ----------
 // 分裂で生まれた細胞：モードに従って1つずつ自分で動く（全陣営共通）
 function steerMode(c,dt){
-  const L=S.leaders[c.f];
+  const L=ownerLeader(c);
   if(spikeFlee(c)) return;
   if(c.mode==='atk') steerAttack(c,dt);
   else if(c.mode==='def') steerDefend(c,dt,L);
@@ -585,7 +630,7 @@ function sanctGoal(c,danger){
 // ---------- 白いトゲ（どの陣営にも属さない敵） ----------
 // 開始 SPIKE_AT 秒後にシャーレの中心に1体現れ、その後 SPIKE_EVERY 秒ごとに1体ずつ中心に湧く（倒されていなくても湧く）。
 // 人が操作する元祖細胞を追いかける（速さは1.5倍）。オンラインではバイオマス上位2人のうち近いほうを狙う。
-// 触れた細胞は陣営に関係なく死ぬ。人の元祖細胞の弾を SPIKE_HP 発当てると倒せる（他の細胞の弾は吸われるだけ）。
+// 触れた細胞は陣営に関係なく死ぬが、ぶつかるたびにトゲの体力も1減る。人の元祖細胞の弾も1発で体力1（他の細胞の弾は吸われるだけ）。体力 SPIKE_HP が尽きると消える。
 // AIの細胞は狙わず、近づかれたら逃げる。確保された保護区には入れない。1人プレイとオンライン対戦だけで出る
 const SPIKE_AT=120, SPIKE_EVERY=60, SPIKE_HP=4, SPIKE_R=36, SPIKE_SPEED=1.5;
 function spikeTick(dt){
@@ -593,15 +638,15 @@ function spikeTick(dt){
   if(S.t>=S.nextSpikeAt){
     S.nextSpikeAt+=SPIKE_EVERY;
     S.spikes.push({id:++S.spikeId,x:rand(-20,20),y:rand(-20,20),vx:0,vy:0,r:SPIKE_R,hp:SPIKE_HP,rot:Math.random()*TAU,flash:0,cd:1.5,wx:null,wy:null});
-    for(let f=0;f<FACTIONS.length;f++) if(human(f)) notify(f,`白いトゲが中心に現れた（${S.spikes.length}体）。元祖細胞の弾を4発当てると倒せる`);
+    for(let f=0;f<FACTIONS.length;f++) if(human(f)) notify(f,`白いトゲが中心に現れた（${S.spikes.length}体）。体力4。細胞にぶつかるか元祖細胞の弾が当たるたびに1減る`);
   }
   if(!S.spikes.length) return;
   // 人が操作する元祖細胞を狙う。オンラインではバイオマス上位2人に絞る
-  const cand=[0,1,2,3].filter(f=>human(f) && S.leaders[f]).sort((a,b)=>S.mass[b]-S.mass[a]).slice(0,2);
+  const cand=PL.map((p,k)=>k).filter(k=>!PL[k].gone && S.pleaders[k] && human(PL[k].f)).sort((a,b)=>(S.pmass[b]||0)-(S.pmass[a]||0)).slice(0,2);
   for(const k of S.spikes){
     k.rot+=dt*1.6; k.flash=Math.max(0,k.flash-dt); k.cd=Math.max(0,k.cd-dt);
     let tg=null, td=1e9;
-    for(const f of cand){ const L=S.leaders[f]; if(L.dead) continue; const d=Math.hypot(L.x-k.x,L.y-k.y); if(d<td){ td=d; tg=L; } }
+    for(const p of cand){ const L=S.pleaders[p]; if(L.dead) continue; const d=Math.hypot(L.x-k.x,L.y-k.y); if(d<td){ td=d; tg=L; } }
     let dx, dy;
     if(tg){ dx=tg.x-k.x; dy=tg.y-k.y; }
     else { if(k.wx===null || Math.hypot(k.wx-k.x,k.wy-k.y)<80){ const [x,y]=randInDish(200); k.wx=x; k.wy=y; } dx=k.wx-k.x; dy=k.wy-k.y; }
@@ -610,12 +655,13 @@ function spikeTick(dt){
     k.x+=k.vx*dt; k.y+=k.vy*dt;
     const d=Math.hypot(k.x,k.y), lim=DISH_R-k.r; if(d>lim){ k.x*=lim/d; k.y*=lim/d; }
     const sz=S.sanct; if(sz && sz.owner>=0) pushOut(sz,k,k.r,.3);
-    // 触れた細胞は死ぬ（倒したあと少しだけ動きが鈍る）
+    // 触れた細胞は死ぬ（倒したあと少しだけ動きが鈍る）。ぶつかるたびにトゲの体力が1減る
     query(cellGrid,k.x,k.y,k.r+90,c=>{
-      if(c.dead || Math.hypot(c.x-k.x,c.y-k.y)>=c.r+k.r*.85) return;
+      if(k.hp<=0 || c.dead || Math.hypot(c.x-k.x,c.y-k.y)>=c.r+k.r*.85) return;
       const was=c.leader, f=c.f;
       kill(c); k.cd=1.2;
       if(human(f)) notify(f, was ? '元祖細胞が白いトゲにやられた' : '細胞が白いトゲにやられた');
+      damageSpike(k,-1,c.x,c.y);
     });
   }
   // トゲ同士は重ならないように少し押し合う
@@ -628,15 +674,16 @@ function spikeTick(dt){
 function spikeHit(s){
   const k=S.spikes.find(k=>Math.hypot(s.x-k.x,s.y-k.y)<k.r); if(!k) return false;
   s.life=-1; s.hit=true;
-  const L=S.leaders[s.f];
-  if(human(s.f) && L && L.id===s.from){
-    k.hp--; k.flash=.25; burst(s.x,s.y,C.spike,6,90);
-    if(k.hp<=0){
-      burst(k.x,k.y,C.spike,24,220); S.spikes=S.spikes.filter(o=>o!==k);
-      for(let f=0;f<FACTIONS.length;f++) if(human(f)) notify(f, f===s.f ? '白いトゲを倒した' : FACTIONS[s.f].name+'が白いトゲを倒した');
-    }
-  } else burst(s.x,s.y,C.dim,2,30);
+  if(s.pl>=0 && human(s.f)) damageSpike(k,s.f,s.x,s.y);
+  else burst(s.x,s.y,C.dim,2,30);
   return true;
+}
+// トゲの体力を1減らす。by＝弾を当てた陣営（-1 は細胞にぶつかって削れた）
+function damageSpike(k,by,x,y){
+  k.hp--; k.flash=.25; burst(x,y,C.spike,6,90);
+  if(k.hp>0) return;
+  burst(k.x,k.y,C.spike,24,220); S.spikes=S.spikes.filter(o=>o!==k);
+  for(let f=0;f<FACTIONS.length;f++) if(human(f)) notify(f, by<0 ? '白いトゲが体力を使い果たして消えた' : f===by ? '白いトゲを倒した' : FACTIONS[by].name+'が白いトゲを倒した');
 }
 // トゲが近いときに逃げる向き（AIと子細胞が使う）。一番近いトゲから離れる
 function spikeFlee(c){
@@ -674,7 +721,7 @@ function steerAttack(c,dt){
     if(o.dead||o.f===c.f||blocked(c,o.x,o.y)) return;
     const d=Math.hypot(o.x-c.x,o.y-c.y); if(d<vr && d<nd){nd=d;near=o;}
   });
-  const own=ownCount(c), canShoot=own>=2 && own-1>c.pl.length-own;
+  const own=ownCount(c), canShoot=own>=2 && own-1>c.pl.length-own, A=anchorOf(c);
   if(!canShoot) c.retreat=true;
   else if(own>=Math.min(4,holdCap(c))) c.retreat=false;
   if(c.retreat){
@@ -682,13 +729,19 @@ function steerAttack(c,dt){
     const sg=sanctGoal(c, near && nd<500);
     if(sg){ setDir(c,sg.x-c.x,sg.y-c.y); return; }
     if(near && nd<500){ setDir(c,c.x-near.x,c.y-near.y); return; }
-    seekFood(c); return;
+    if(A) seekFood(c,A,ANCHOR_R.atk); else seekFood(c); return;
   }
+  // 旗があれば、その範囲から離れすぎたら戻る
+  if(A && Math.hypot(A.x-c.x,A.y-c.y)>ANCHOR_R.atk){ setDir(c,A.x-c.x,A.y-c.y); return; }
   if(near){
     if(nd<360 && c.fireCd<=0) fire(c,near.x-c.x,near.y-c.y);
     const dx=near.x-c.x, dy=near.y-c.y, k=nd>260?1:-.6;
     setDir(c,dx*k-dy*.35,dy*k+dx*.35); return;
   }
+  if(A){ seekFood(c,A,ANCHOR_R.atk*.6); return; }
+  // 旗がないときは、自分のものでない拠点を取りに行く
+  const tb=nearestBase(c,b=>b.owner!==c.f,1800);
+  if(tb && Math.hypot(tb.x-c.x,tb.y-c.y)>tb.r*.5){ setDir(c,tb.x-c.x+rand(-60,60),tb.y-c.y+rand(-60,60)); return; }
   seekFood(c);
 }
 // 増殖：自分の陣営の元祖細胞（プレイヤーなら操作している細胞）の周り、全体マップの約1/4の広さ（半径 GROW_R）の中だけを動き、
@@ -697,7 +750,7 @@ const GROW_R=DISH_R/2;
 function steerGrow(c,dt){
   c.think-=dt; if(c.think>0) return;
   c.think=rand(.2,.35);
-  const L=S.leaders[c.f];
+  const A=anchorOf(c), L=A||ownerLeader(c), LR=A?ANCHOR_R.grow:GROW_R;
   let near=null,nd=1e9;
   query(cellGrid,c.x,c.y,260,o=>{
     if(o.dead||o.f===c.f) return;
@@ -706,9 +759,9 @@ function steerGrow(c,dt){
   const sg=sanctGoal(c, inDanger(c,near,nd));
   if(sg){ setDir(c,sg.x-c.x,sg.y-c.y); return; }
   if(near && nd<200){ setDir(c,c.x-near.x,c.y-near.y); return; }
-  // 範囲の外に出ていたら元祖細胞のほうへ戻る
-  if(L && Math.hypot(L.x-c.x,L.y-c.y)>GROW_R){ setDir(c,L.x-c.x,L.y-c.y); return; }
-  seekFood(c,L,GROW_R);
+  // 範囲の外に出ていたら元祖細胞（旗があれば旗の範囲）のほうへ戻る
+  if(L && Math.hypot(L.x-c.x,L.y-c.y)>LR){ setDir(c,L.x-c.x,L.y-c.y); return; }
+  seekFood(c,L,LR);
 }
 // 防御：防御モード以外の味方（元祖細胞・攻撃・増殖）を探して守る。自分の色は DEF_KEEP 個まで手元に残し、
 // 余りだけを、外来プラスミドが入った味方や空き枠のある味方に撃ち込む（当たると治す・補充する）。
@@ -730,6 +783,9 @@ function steerDefend(c,dt,L){
     });
     c.ally=best; c.guard=guard||L;
   }
+  // 旗があれば、その範囲から離れすぎたら戻る（範囲の中で味方を守る）
+  const A=anchorOf(c);
+  if(A && Math.hypot(A.x-c.x,A.y-c.y)>ANCHOR_R.def){ setDir(c,A.x-c.x,A.y-c.y); return; }
   // 余り（DEF_KEEP 個を超えた分）があり、撃っても自分が乗っ取られないときだけ撃てる
   const canGive=ownCount(c)>DEF_KEEP && canFire(c);
   const a=c.ally;
@@ -744,7 +800,7 @@ function steerDefend(c,dt,L){
     setDir(c,a.x-c.x,a.y-c.y); return;
   }
   // 余りがないときは、視界の中の漂うプラスミド（白か自分の色）を取りに行く。見当たらなければ養分を食べながら探し回る
-  const g=c.guard && !c.guard.dead && c.guard.f===c.f ? c.guard : L;
+  const g=A || (c.guard && !c.guard.dead && c.guard.f===c.f ? c.guard : L);
   if(!canGive){
     // 付き添う味方から DEF_LEASH 以上は離れない
     if(g && Math.hypot(g.x-c.x,g.y-c.y)>DEF_LEASH){ setDir(c,g.x-c.x,g.y-c.y); return; }
@@ -776,7 +832,7 @@ const pointer={x:vw/2,y:vh/2};
 function screenToWorld(x,y){ const z=S.cam.z; return {x:(x-vw/2)/z+S.cam.x, y:(y-vh/2)/z+S.cam.y}; }
 function setPointer(e){ const b=cv.getBoundingClientRect(); pointer.x=e.clientX-b.left; pointer.y=e.clientY-b.top; }
 cv.addEventListener('pointermove',setPointer);
-cv.addEventListener('pointerdown',e=>{setPointer(e); if(e.button===2 && playing()) INP[ME].fi++;});
+cv.addEventListener('pointerdown',e=>{setPointer(e); if(e.button===2 && playing()) INP[MP].fi++;});
 const typing = e => e.target && (e.target.tagName==='INPUT' || e.target.tagName==='TEXTAREA');
 // モード選択
 const modeBtns=[...document.querySelectorAll('.mode')];
@@ -786,40 +842,57 @@ addEventListener('keydown',e=>{ if(typing(e)) return; const m={Digit1:'atk',Digi
 cv.addEventListener('contextmenu',e=>e.preventDefault());
 addEventListener('keydown',e=>{
   if(typing(e)) return;
-  if(e.code==='KeyF'){ if(playing()) INP[ME].fi++; }
+  if(e.code==='KeyF'){ if(playing()) INP[MP].fi++; }
+  if(e.code==='KeyM'){ openBigMap(bm.hidden); }
+  if(e.code==='Escape' && !bm.hidden) openBigMap(false);
   if(e.code==='Enter' && !playing() && !(S.watch && !S.over) && !S.net && !NET.inLobby && !NET.inRoom) startGame();
 });
-document.getElementById('b-fire').addEventListener('pointerdown',e=>{e.preventDefault(); if(playing()) INP[ME].fi++;});
+document.getElementById('b-fire').addEventListener('pointerdown',e=>{e.preventDefault(); if(playing()) INP[MP].fi++;});
 const playing = () => S && !S.demo && !S.over && ME>=0;
 // 観戦中か：AI観戦、やられたあとの観戦続行、オンラインで自分の株が全滅したか観戦として参加した
-const spectating = () => S.watch || S.spectate || (!S.demo && (ME<0 || counts[ME]===0));
+// チーム戦では、チームが残っていても自分の細胞が1つもなくなったら観戦になる
+const spectating = () => S.watch || S.spectate || (!S.demo && (ME<0 || counts[ME]===0 || (MP>=0 && S.pleaders && !S.pleaders[MP] && (S.net!=='client' || NET.snapAt>0))));
 
 // ---------- toast ----------
 const toastEl=document.getElementById('toast'); let toastT=0;
 function toast(msg){ toastEl.textContent=msg; toastEl.classList.add('show'); toastT=2.2; }
-// 陣営 f を操作している人へ知らせる（この画面ならその場で、オンラインの参加者には送る）
-function notify(f,msg){
-  if(f===ME) toast(msg);
-  else if(S.net==='host') netEmit('ev',{g:NET.g,to:f,msg});
+// プレイヤー p へ知らせる（この画面ならその場で、オンラインの参加者には送る）
+function notifyP(p,msg){
+  if(p===MP) toast(msg);
+  else if(S.net==='host') netEmit('ev',{g:NET.g,to:p,msg});
 }
+// 陣営 f の全プレイヤー（チーム全員）へ知らせる
+function notify(f,msg){ PL.forEach((p,k)=>{ if(p.f===f && !p.gone) notifyP(k,msg); }); }
 
 // ---------- update ----------
 function update(dt){
   S.t+=dt; if(!S.demo || S.watch) S.time-=dt;
   // この画面の操作を自分の陣営の入力欄へ。ホストは参加者の操作も読み込む
   const mw=screenToWorld(pointer.x,pointer.y);
-  if(ME>=0 && !S.demo){ const I=INP[ME]; I.x=mw.x; I.y=mw.y; I.m=selMode; }
+  if(MP>=0 && !S.demo && INP[MP]){ const I=INP[MP]; I.x=mw.x; I.y=mw.y; I.m=selMode; }
   if(S.net==='host') readRemoteInputs();
   counts=[0,0,0,0]; for(const c of cells) counts[c.f]++;
   cellGrid=buildGrid(cells); foodGrid=buildGrid(foods);
 
-  // 各陣営の元祖細胞（操作役）。失われたら、その陣営で一番大きい細胞が引き継ぐ
-  S.leaders=[null,null,null,null];
-  for(const c of cells) if(c.leader){ if(S.leaders[c.f]) c.leader=false; else S.leaders[c.f]=c; }
+  // 元祖細胞（操作役）。AIの陣営は1つ、人の陣営はプレイヤーごとに1つ。失われたら、その人の細胞で一番大きいものが、
+  // なければチームの中でまだ誰も操作していない細胞が引き継ぐ。どれもなければ、その人は観戦になる
+  S.leaders=[null,null,null,null]; S.pleaders=PL.map(()=>null);
+  for(const c of cells) if(c.leader){
+    if(human(c.f) && c.pid>=0 && PL[c.pid] && !PL[c.pid].gone && PL[c.pid].f===c.f){ if(S.pleaders[c.pid]) c.leader=false; else S.pleaders[c.pid]=c; }
+    else if(!human(c.f)){ if(S.leaders[c.f]) c.leader=false; else S.leaders[c.f]=c; }
+    else c.leader=false;
+  }
+  if(!S.demo) PL.forEach((p,k)=>{
+    if(p.gone || S.pleaders[k]) return;
+    let b=null; for(const c of cells) if(c.f===p.f && c.pid===k && !c.leader && (!b || c.mass>b.mass)) b=c;
+    if(!b) for(const c of cells) if(c.f===p.f && !c.leader && !(c.pid>=0 && S.pleaders[c.pid]) && (!b || c.mass>b.mass)) b=c;
+    if(b){ b.leader=true; b.pid=k; S.pleaders[k]=b; if(S.t>1) notifyP(k,'操作する細胞が引き継がれた'); }
+  });
+  PL.forEach((p,k)=>{ const L=S.pleaders[k]; if(L && !S.leaders[L.f]) S.leaders[L.f]=L; });
   for(let f=0;f<FACTIONS.length;f++){
-    if(S.leaders[f]) continue;
+    if(S.leaders[f] || human(f)) continue;
     let b=null; for(const c of cells) if(c.f===f && (!b || c.mass>b.mass)) b=c;
-    if(b){ b.leader=true; S.leaders[f]=b; if(human(f)) notify(f,'操作する細胞が引き継がれた'); }
+    if(b){ b.leader=true; S.leaders[f]=b; }
   }
 
   // 抗生物質
@@ -844,25 +917,25 @@ function update(dt){
   }
   zones=zones.filter(z=>z.t<10.6);
 
-  // 分裂・発射は人が操作する元祖細胞だけが、押された回数が増えたときに行う
-  for(let f=0;f<FACTIONS.length;f++){
-    if(!human(f)) continue;
-    const I=INP[f], L=S.leaders[f], seen=SEEN[f];
+  // 発射は人が操作する元祖細胞だけが、押された回数が増えたときに行う（プレイヤーごと）
+  for(let p=0;p<PL.length;p++){
+    if(PL[p].gone || !human(PL[p].f)) continue;
+    const I=INP[p], L=S.pleaders[p], seen=SEEN[p], f=PL[p].f;
     if(I.fi>seen.fi){
       seen.fi=I.fi;
       if(L && L.fireCd<=0){
         if(canFire(L)) fire(L,I.x-L.x,I.y-L.y);
-        else notify(f, ownCount(L) ? '今撃つと乗っ取られるので撃てない' : '撃てるプラスミドがない');
+        else notifyP(p, ownCount(L) ? '今撃つと乗っ取られるので撃てない' : '撃てるプラスミドがない');
       }
     }
   }
-  const L0=ME>=0 ? S.leaders[ME] : null;
+  const L0=MP>=0 ? S.pleaders[MP] : null;
 
   const n=cells.length;
   for(let i=0;i<n;i++){
     const c=cells[i]; if(c.dead) continue;
     c.splitCd-=dt; c.fuseCd-=dt; c.fireCd-=dt; c.pop=Math.min(1,c.pop+dt*4);
-    if(c.leader && human(c.f)) followMouse(c,INP[c.f]);
+    if(c.leader && c.pid>=0 && human(c.f)) followMouse(c,INP[c.pid]);
     else if(c.leader) steerAI(c,dt);
     else steerMode(c,dt);
     // 大きいほど遅い：小さい細胞（質量20以下）を1として、質量150以上で0.8倍
@@ -997,13 +1070,15 @@ function update(dt){
     for(const dn of dnas) if(dn.alive && dn.f>=0 && dn.f!==sz.owner) pushOut(sz,dn,8,.5);
   }
   spikeTick(dt);
+  baseTick(dt);
+  for(let p=0;p<S.swCd.length;p++) S.swCd[p]=Math.max(0,S.swCd[p]-dt);
 
   for(const p of parts){ p.x+=p.vx*dt; p.y+=p.vy*dt; p.vx*=.94; p.vy*=.94; p.life-=dt; }
   parts=parts.filter(p=>p.life>0);
   cells=cells.filter(c=>!c.dead);
 
-  S.mass=[0,0,0,0]; counts=[0,0,0,0];
-  for(const c of cells){ S.mass[c.f]+=c.mass; counts[c.f]++; }
+  S.mass=[0,0,0,0]; counts=[0,0,0,0]; S.pmass=PL.map(()=>0);
+  for(const c of cells){ S.mass[c.f]+=c.mass; counts[c.f]++; if(c.pid>=0 && c.pid<S.pmass.length) S.pmass[c.pid]+=c.mass; }
   if(!S.demo && ME>=0) S.peak=Math.max(S.peak,counts[ME]);
   FACTIONS.forEach((f,i)=>{
     if(!S.out[i] && counts[i]===0){
@@ -1169,6 +1244,8 @@ function render(){
     ctx.restore();
   }
 
+  // 拠点
+  for(const b of S.bases) if(vis(b.x,b.y,b.r+20)) drawBase(b,z);
   // 浮遊プラスミド
   ctx.strokeStyle=C.dna; ctx.lineWidth=2.2;
   for(const dn of dnas){
@@ -1194,6 +1271,8 @@ function render(){
   const sorted=cells.filter(c=>vis(c.x,c.y,c.r*1.4) && (c.f===ME || seen(c.x,c.y,c.r))).sort((a,b)=>a.mass-b.mass);
   for(const c of sorted) drawCell(c,z);
   for(const k of S.spikes) drawSpike(k,z);
+  // 自分の旗
+  if(ME>=0 && !S.demo) for(const m of MODES) drawFlagSet(ctx,S.flags[MP][m],m,x=>x,y=>y,Math.max(14,13/z),Math.max(2,1.8/z));
 
   // 粒子
   for(const p of parts){ if(!seen(p.x,p.y)) continue; ctx.globalAlpha=Math.max(0,p.life/p.max); ctx.fillStyle=p.color; ctx.beginPath(); ctx.arc(p.x,p.y,3,0,TAU); ctx.fill(); }
@@ -1270,7 +1349,7 @@ function drawCell(c,z){
   }
   // オンライン対戦の名前：元祖細胞は名前、分裂で生まれた細胞は名前＋番号。
   // 人が操作している元祖細胞は、名前の前に王冠を付ける（名前がない1人プレイでは王冠だけ）
-  const nm=NAMES[c.f], crown=c.leader && !S.demo && HUM[c.f];
+  const nm=c.pid>=0 && PL[c.pid] ? PL[c.pid].name : '', crown=c.leader && !S.demo && c.pid>=0 && human(c.f);
   if((nm || crown) && r*z>7){
     const label = nm ? (c.leader ? nm : nm+c.no) : '';
     const fs=(c.leader?13:11)/z, ty=c.y+r*1.25+3/z;
@@ -1361,8 +1440,9 @@ function drawMap(){
     g.beginPath(); g.arc(cx+c.x*sc,cy+c.y*sc,Math.max(1.6,c.r*sc),0,TAU); g.fill();
   }
   for(const k of S.spikes){ g.fillStyle=C.spike; g.strokeStyle=C.bg; g.lineWidth=1; g.beginPath(); g.arc(cx+k.x*sc,cy+k.y*sc,4,0,TAU); g.fill(); g.stroke(); }
+  for(const b of S.bases){ g.strokeStyle=b.owner>=0?FACTIONS[b.owner].color:C.dim; g.lineWidth=1.5; g.beginPath(); g.arc(cx+b.x*sc,cy+b.y*sc,Math.max(3,b.r*sc),0,TAU); g.stroke(); }
   if(!S.demo || S.watch){
-    const z=S.cam.z, L=spectating() ? S.leaders[S.follow] : (ME>=0 ? S.leaders[ME] : null);
+    const z=S.cam.z, L=spectating() ? S.leaders[S.follow] : (MP>=0 ? S.pleaders[MP] : null);
     if(L){ g.strokeStyle=C.ink; g.lineWidth=1.5; g.beginPath(); g.arc(cx+L.x*sc,cy+L.y*sc,5,0,TAU); g.stroke(); }
     g.strokeStyle=C.ink; g.globalAlpha=.7; g.lineWidth=1;
     g.strokeRect(cx+(S.cam.x-vw/2/z)*sc, cy+(S.cam.y-vh/2/z)*sc, vw/z*sc, vh/z*sc);
@@ -1416,7 +1496,7 @@ function updateHUD(){
   el('s-mass').textContent=Math.round(S.mass[ME]);
   let pl=0, fx=0; for(const c of cells) if(c.f===ME) for(const q of c.pl) q===ME?pl++:fx++;
   el('s-pl').textContent=pl+(fx?`（外来 ${fx}）`:'');
-  const mc={atk:0,def:0,grow:0}; for(const c of cells) if(c.f===ME && !c.leader) mc[c.mode]++;
+  const mc={atk:0,def:0,grow:0}; for(const c of cells) if(c.f===ME && c.pid===MP && !c.leader) mc[c.mode]++;
   for(const m in mc) el('mc-'+m).textContent=mc[m];
 }
 
@@ -1464,11 +1544,256 @@ el('w-lv').addEventListener('click',e=>{
   renderWatchLv();
 });
 
+// ---------- 拠点 ----------
+// 隣り合う陣営のあいだ（上下左右）に4か所、中心に大拠点を1か所。中にいる細胞の数の多数決で、一番多い陣営がゲージを進める
+// （同数で並んだら止まる。差が大きいほど少し速い）。他の陣営が持っている拠点は、まずゲージを0まで削ってから取る。
+// 持っている陣営の色のプラスミドが拠点の周りに数秒ごとに湧く（中心の大拠点は多め・速め）。他の陣営が拾うと乗っ取りの元になる
+const BASE_R=260, BASE_CR=330, BASE_TIME=8, BASE_GEN=4, BASE_GEN_C=2.5, BASE_MAXDNA=6, BASE_MAXDNA_C=9;
+function makeBases(){
+  const d=DISH_R*.62, B=[];
+  for(const a of [0,Math.PI/2,Math.PI,Math.PI*1.5]) B.push({x:Math.cos(a)*d, y:Math.sin(a)*d, r:BASE_R, big:false});
+  B.push({x:0, y:0, r:BASE_CR, big:true});
+  return B.map((b,i)=>({...b, i, owner:-1, cf:-1, prog:0, gen:rand(1,BASE_GEN)}));
+}
+function baseTick(dt){
+  for(const b of S.bases){
+    const n=[0,0,0,0];
+    query(cellGrid,b.x,b.y,b.r,c=>{ if(!c.dead && Math.hypot(c.x-b.x,c.y-b.y)<b.r) n[c.f]++; });
+    let top=-1, second=0;
+    for(let f=0;f<4;f++){ if(top<0 || n[f]>n[top]){ if(top>=0) second=Math.max(second,n[top]); top=f; } else second=Math.max(second,n[f]); }
+    if(top>=0 && n[top]>second){
+      const f=top, rate=Math.min(2,.6+(n[top]-second)*.2)/BASE_TIME*dt;
+      if(b.owner===f) b.prog=Math.min(1,b.prog+rate);
+      else if(b.owner>=0){
+        b.prog-=rate;
+        if(b.prog<=0){ const lost=b.owner; b.owner=-1; b.cf=f; b.prog=0; if(human(lost)) notify(lost, b.big?'中心の大拠点を奪われた':'拠点を奪われた'); }
+      } else if(b.cf!==f){
+        b.prog-=rate; if(b.prog<=0){ b.cf=f; b.prog=0; }
+      } else {
+        b.prog+=rate;
+        if(b.prog>=1){ b.prog=1; b.owner=f; if(human(f)) notify(f, b.big?'中心の大拠点を取った':'拠点を取った'); }
+      }
+    }
+    // 持ち主の色のプラスミドを湧かせる
+    if(b.owner>=0){
+      b.gen-=dt;
+      if(b.gen<=0){
+        b.gen=b.big?BASE_GEN_C:BASE_GEN;
+        let alive=0; for(const d of dnas) if(d.bid===b.i && d.alive) alive++;
+        if(alive<(b.big?BASE_MAXDNA_C:BASE_MAXDNA)){
+          const a=Math.random()*TAU, rr=Math.sqrt(Math.random())*b.r*.85;
+          dnas.push({x:b.x+Math.cos(a)*rr, y:b.y+Math.sin(a)*rr, vx:0, vy:0, alive:true, f:b.owner, ttl:30, ph:Math.random()*TAU, respawn:0, bid:b.i});
+        }
+      }
+    }
+  }
+}
+// pred を満たす拠点のうち、maxD 以内で一番近いもの
+function nearestBase(c,pred,maxD){
+  let best=null, bd=maxD;
+  for(const b of S.bases){ if(!pred(b)) continue; const d=Math.hypot(b.x-c.x,b.y-c.y); if(d<bd){ bd=d; best=b; } }
+  return best;
+}
+function drawBase(b,z){
+  const own=b.owner>=0, col=own ? FACTIONS[b.owner].color : C.dim;
+  ctx.save();
+  ctx.globalAlpha=own?.1:.05; ctx.fillStyle=own?col:C.ink;
+  ctx.beginPath(); ctx.arc(b.x,b.y,b.r,0,TAU); ctx.fill();
+  ctx.globalAlpha=.7; ctx.lineWidth=Math.max(2,1.6/z); ctx.strokeStyle=col;
+  ctx.setLineDash(own?[]:[16,12]); ctx.stroke(); ctx.setLineDash([]);
+  // 取り合いのゲージ（上から時計回り）
+  if(b.prog>0 && (own || b.cf>=0)){
+    ctx.globalAlpha=.95; ctx.strokeStyle=FACTIONS[own?b.owner:b.cf].color; ctx.lineWidth=Math.max(5,4/z);
+    ctx.beginPath(); ctx.arc(b.x,b.y,b.r+Math.max(8,6/z),-Math.PI/2,-Math.PI/2+TAU*b.prog); ctx.stroke();
+  }
+  ctx.globalAlpha=own?.9:.45; drawPlasmid(b.x,b.y,b.big?18:13,own?col:C.ink,2.2);
+  ctx.restore();
+}
+
+// ---------- 旗（全体マップから置く集合地点） ----------
+// モードごとに旗を何本でも置ける（各 FLAG_MAX 本まで）。旗が1本ならその周り、2本なら結んだ線の周り、
+// 3本以上なら旗で囲まれた範囲（凸包）の周りに、そのモードの子細胞が集まり、その周りでいつもの動きをする。
+// 細胞ごとに範囲の中の1点（anchor）を受け持ち、旗が変わったら受け持ちを選び直す。旗はプレイヤーごとで、その人の子細胞だけが従う
+const FLAG_MAX=8, ANCHOR_R={atk:650, def:450, grow:350};
+const emptyFlags=()=>({atk:[],def:[],grow:[]});
+function convexHull(P){
+  const p=P.map(q=>({x:q.x,y:q.y})).sort((a,b)=>a.x-b.x||a.y-b.y);
+  if(p.length<3) return p;
+  const cr=(o,a,b)=>(a.x-o.x)*(b.y-o.y)-(a.y-o.y)*(b.x-o.x), lo=[], up=[];
+  for(const q of p){ while(lo.length>=2 && cr(lo[lo.length-2],lo[lo.length-1],q)<=0) lo.pop(); lo.push(q); }
+  for(let i=p.length-1;i>=0;i--){ const q=p[i]; while(up.length>=2 && cr(up[up.length-2],up[up.length-1],q)<=0) up.pop(); up.push(q); }
+  up.pop(); lo.pop(); return lo.concat(up);
+}
+// 旗の並びが作る範囲の中から1点を選ぶ（点の周り／線の周り／囲まれた範囲の中）
+function sampleRegion(F){
+  const jitter=(x,y,r)=>{ const a=Math.random()*TAU, d=Math.sqrt(Math.random())*r; return {x:x+Math.cos(a)*d, y:y+Math.sin(a)*d, r:0}; };
+  if(F.length===1) return jitter(F[0].x,F[0].y,220);
+  const H=convexHull(F);
+  if(H.length<3){ const a=H[0], b=H[H.length-1], t=Math.random(); return jitter(a.x+(b.x-a.x)*t, a.y+(b.y-a.y)*t, 140); }
+  const tri=[]; let total=0;
+  for(let i=1;i<H.length-1;i++){ const a=H[0], b=H[i], c=H[i+1], ar=Math.abs((b.x-a.x)*(c.y-a.y)-(b.y-a.y)*(c.x-a.x))/2; tri.push([a,b,c,ar]); total+=ar; }
+  let r=Math.random()*total, t=tri[0];
+  for(const q of tri){ r-=q[3]; if(r<=0){ t=q; break; } }
+  let u=Math.random(), v=Math.random(); if(u+v>1){ u=1-u; v=1-v; }
+  const [a,b,c]=t; return {x:a.x+(b.x-a.x)*u+(c.x-a.x)*v, y:a.y+(b.y-a.y)*u+(c.y-a.y)*v, r:0};
+}
+// この細胞が受け持つ集合地点（旗がなければ null）
+function anchorOf(c){
+  if(c.pid<0 || !human(c.f) || c.leader || !S.flags[c.pid]) return null;
+  const F=S.flags[c.pid][c.mode]; if(!F || !F.length){ c.anchor=null; return null; }
+  const v=S.flagVer[c.pid][c.mode];
+  if(!c.anchor || c.anchorVer!==v){ c.anchor=sampleRegion(F); c.anchorVer=v; }
+  return c.anchor;
+}
+// 旗の操作（この画面の陣営 ME の旗）
+function addFlag(m,x,y){
+  const F=S.flags[MP][m];
+  if(F.length>=FLAG_MAX){ toast(`この旗は${FLAG_MAX}本までです`); return; }
+  const d=Math.hypot(x,y), lim=DISH_R-40; if(d>lim){ x*=lim/d; y*=lim/d; }
+  F.push({x,y}); S.flagVer[MP][m]++;
+}
+function removeNearestFlag(x,y,maxD){
+  let bm=null, bi=-1, bd=maxD;
+  for(const m of MODES) S.flags[MP][m].forEach((p,i)=>{ const d=Math.hypot(p.x-x,p.y-y); if(d<bd){ bd=d; bm=m; bi=i; } });
+  if(bm){ S.flags[MP][bm].splice(bi,1); S.flagVer[MP][bm]++; return true; }
+  return false;
+}
+function clearFlags(){ for(const m of MODES){ if(S.flags[MP][m].length){ S.flags[MP][m]=[]; S.flagVer[MP][m]++; } } }
+// ホスト：参加者の旗を presence から受け取る
+function applyRemoteFlags(seat,fl){
+  if(!fl || typeof fl!=='object') return;
+  for(const m of MODES){
+    const arr=(Array.isArray(fl[m])?fl[m]:[]).slice(0,FLAG_MAX).filter(p=>Array.isArray(p)).map(p=>({x:clampN(p[0],-DISH_R,DISH_R), y:clampN(p[1],-DISH_R,DISH_R)}));
+    if(JSON.stringify(arr)!==JSON.stringify(S.flags[seat][m])){ S.flags[seat][m]=arr; S.flagVer[seat][m]++; }
+  }
+}
+const flagsForNet = () => MP<0 ? null : Object.fromEntries(MODES.map(m=>[m, S.flags[MP][m].map(p=>[Math.round(p.x),Math.round(p.y)])]));
+// 乗り換え：プレイヤー p の元祖細胞を、その人の細胞 id に移す（SWITCH_CD 秒に1回）
+const SWITCH_CD=5;
+function applySwitch(p,id){
+  if(!PL[p]) return;
+  const f=PL[p].f;
+  if(S.swCd[p]>0){ notifyP(p,`乗り換えはあと${Math.ceil(S.swCd[p])}秒待ってください`); return; }
+  const c=cells.find(o=>!o.dead && o.f===f && o.pid===p && (o.id===id || o.id%238328===id));
+  if(!c || c.leader) return;
+  const L=S.pleaders[p]; if(L) L.leader=false;
+  c.leader=true; S.pleaders[p]=c; S.swCd[p]=SWITCH_CD; c.anchor=null;
+  notifyP(p,'元祖細胞を乗り換えた');
+}
+function requestSwitch(id){
+  if(S.net==='client'){ INP[MP].sw={id, n:(INP[MP].sw?INP[MP].sw.n:0)+1}; return; }
+  applySwitch(MP,id);
+}
+// 旗の見た目：モードの色の小旗と印。2本以上なら、集まる範囲を薄く描く
+const flagColor = m => m==='atk' ? C.flagAtk : m==='def' ? C.flagDef : C.flagGrow;
+function drawFlagSet(g,F,m,tx,ty,sc,lw){
+  if(!F.length) return;
+  const col=flagColor(m);
+  g.save();
+  if(F.length>=2){
+    const H=convexHull(F);
+    g.beginPath(); H.forEach((p,i)=>{ const x=tx(p.x), y=ty(p.y); i?g.lineTo(x,y):g.moveTo(x,y); });
+    if(H.length>=3){ g.closePath(); g.globalAlpha=.08; g.fillStyle=col; g.fill(); }
+    g.globalAlpha=.55; g.strokeStyle=col; g.lineWidth=lw; g.setLineDash([lw*4,lw*3]); g.stroke(); g.setLineDash([]);
+  }
+  for(const p of F){
+    const x=tx(p.x), y=ty(p.y), h=sc;
+    g.globalAlpha=1; g.strokeStyle=col; g.lineWidth=lw;
+    g.beginPath(); g.moveTo(x,y); g.lineTo(x,y-h*1.6); g.stroke();
+    g.fillStyle=col; g.beginPath(); g.moveTo(x,y-h*1.6); g.lineTo(x+h*1.1,y-h*1.25); g.lineTo(x,y-h*.9); g.closePath(); g.fill();
+    g.fillStyle=C.bg; modeGlyph(g,m,x+h*.38,y-h*1.25,h*.22);
+  }
+  g.restore();
+}
+
+const P2P_PAGE = !(window.claude && window.claude.use) && typeof location!=="undefined" && /^https?:$/.test(location.protocol);
+// ---------- 大きい全体マップ（Mキー） ----------
+// 画面いっぱいに全体マップを開き、旗を置く・1本ずつ消す・全部消す・元祖細胞の乗り換えをする。開いている間もゲームは進む
+let bmTool='atk';
+const bm=el('bigmap'), bmCv=el('bm-cv'), bmCtx=bmCv.getContext('2d');
+function openBigMap(on){
+  if(on && !playing()) return;
+  bm.hidden=!on; if(on){ pressOnly(el('bm-tools'),'tool',bmTool); bmHint(); }
+}
+function bmHint(){
+  const t={atk:'クリックで攻撃の旗を置く。攻撃モードがその周りで敵を探す',def:'クリックで防御の旗を置く。防御モードがその周りの味方を守る',grow:'クリックで増殖の旗を置く。増殖モードがその周りで育つ',switch:'自分の細胞をクリックすると、その細胞に乗り換える（5秒に1回）',erase:'クリックした場所に一番近い旗を消す'}[bmTool];
+  el('bm-hint').textContent=t+'。右クリックでも旗を1本消せます。旗が2本なら線の周り、3本以上なら囲んだ範囲の周りに集まります';
+}
+function bmGeom(){
+  const w=bmCv.clientWidth||600, h=bmCv.clientHeight||400;
+  if(bmCv.width!==Math.round(w*dpr) || bmCv.height!==Math.round(h*dpr)){ bmCv.width=Math.round(w*dpr); bmCv.height=Math.round(h*dpr); }
+  const R=Math.min(w,h)/2-8; return {w,h,R,cx:w/2,cy:h/2,sc:R/DISH_R};
+}
+function bmWorld(e){
+  const b=bmCv.getBoundingClientRect(), G=bmGeom();
+  return {x:(e.clientX-b.left-G.cx)/G.sc, y:(e.clientY-b.top-G.cy)/G.sc};
+}
+function drawBigMap(){
+  if(bm.hidden) return;
+  if(!playing()){ bm.hidden=true; return; }   // 試合が終わったら閉じる
+  const g=bmCtx, G=bmGeom(), {cx,cy,R,sc}=G, tx=x=>cx+x*sc, ty=y=>cy+y*sc;
+  g.setTransform(dpr,0,0,dpr,0,0); g.clearRect(0,0,G.w,G.h);
+  g.fillStyle=C.dish; g.beginPath(); g.arc(cx,cy,R,0,TAU); g.fill(); g.strokeStyle=C.rim; g.lineWidth=3; g.stroke();
+  if(fogOn()){
+    g.save(); g.beginPath(); g.arc(cx,cy,R,0,TAU); g.clip();
+    g.fillStyle=C.fog; const cs=FOG_C*sc; g.beginPath();
+    for(let gy=0;gy<FOG_N;gy++) for(let gx=0;gx<FOG_N;gx++) if(!explored[gx+gy*FOG_N]) g.rect(cx+gx*cs-R-.3,cy+gy*cs-R-.3,cs+.6,cs+.6);
+    g.fill(); g.restore();
+  }
+  for(const b of S.bases){
+    const own=b.owner>=0; g.globalAlpha=own?.25:.12; g.fillStyle=own?FACTIONS[b.owner].color:C.ink;
+    g.beginPath(); g.arc(tx(b.x),ty(b.y),b.r*sc,0,TAU); g.fill();
+    g.globalAlpha=.8; g.strokeStyle=own?FACTIONS[b.owner].color:C.dim; g.lineWidth=1.5; g.stroke();
+    if(b.prog>0 && (own||b.cf>=0)){ g.strokeStyle=FACTIONS[own?b.owner:b.cf].color; g.lineWidth=3; g.beginPath(); g.arc(tx(b.x),ty(b.y),b.r*sc+4,-Math.PI/2,-Math.PI/2+TAU*b.prog); g.stroke(); }
+  }
+  g.globalAlpha=1;
+  const sz=S.sanct; if(sz){ g.strokeStyle=sz.owner>=0?FACTIONS[sz.owner].color:C.ink; g.lineWidth=1.5; g.strokeRect(tx(sz.x),ty(sz.y),sz.s*sc,sz.s*sc); }
+  for(const c of cells){
+    if(c.f!==ME && !seen(c.x,c.y,c.r)) continue;
+    g.fillStyle=FACTIONS[c.f].color; g.globalAlpha=c.f===ME?1:.75;
+    g.beginPath(); g.arc(tx(c.x),ty(c.y),Math.max(2.2,c.r*sc),0,TAU); g.fill();
+    if(c.f===ME && !c.leader && c.r*sc>3.5){ g.fillStyle=C.bg; modeGlyph(g,c.mode,tx(c.x),ty(c.y),Math.max(1.6,c.r*sc*.5)); }
+  }
+  g.globalAlpha=1;
+  const L=MP>=0?S.pleaders[MP]:null;
+  for(const k of S.spikes){ g.fillStyle=C.spike; g.strokeStyle=C.bg; g.lineWidth=1.5; g.beginPath(); g.arc(tx(k.x),ty(k.y),Math.max(4,k.r*sc),0,TAU); g.fill(); g.stroke(); }
+  if(ME>=0) for(const m of MODES) drawFlagSet(g,S.flags[MP][m],m,tx,ty,9,2);
+  if(L){ g.strokeStyle=C.crown; g.lineWidth=2.5; g.beginPath(); g.arc(tx(L.x),ty(L.y),Math.max(7,L.r*sc+4),0,TAU); g.stroke(); }
+}
+el('bm-tools').addEventListener('click',e=>{ const b=e.target.closest('button[data-tool]'); if(!b) return; bmTool=b.dataset.tool; pressOnly(el('bm-tools'),'tool',bmTool); bmHint(); });
+el('bm-clear').addEventListener('click',()=>{ clearFlags(); toast('旗を全部消しました'); });
+el('bm-close').addEventListener('click',()=>openBigMap(false));
+bmCv.addEventListener('contextmenu',e=>e.preventDefault());
+bmCv.addEventListener('pointerdown',e=>{
+  if(!playing()) return;
+  const w=bmWorld(e), G=bmGeom();
+  if(e.button===2 || bmTool==='erase'){ if(!removeNearestFlag(w.x,w.y,24/G.sc)) toast('近くに旗がありません'); return; }
+  if(bmTool==='switch'){
+    let best=null, bd=18/G.sc;
+    for(const c of cells){ if(c.f!==ME || c.pid!==MP || c.dead) continue; const d=Math.hypot(c.x-w.x,c.y-w.y)-c.r; if(d<bd){ bd=d; best=c; } }
+    if(best) requestSwitch(best.id); else toast('自分の細胞をクリックしてください');
+    return;
+  }
+  addFlag(bmTool,w.x,w.y);
+});
+el('map').addEventListener('click',()=>openBigMap(true));
+// バージョン表示。単体版（Webサイト）では1分ごとに公開中のファイルを確かめ、新しい版が出ていたら知らせる
+el('ver-label').textContent=versionLabel();
+el('update-reload').addEventListener('click',()=>location.reload());
+if(P2P_PAGE && !BUILD.startsWith('__')) setInterval(async()=>{
+  try{
+    const t=await (await fetch(location.href.split('#')[0],{cache:'no-store'})).text();
+    const m=t.match(/BUILD='([^']+)'/);
+    if(m && m[1]!==BUILD && !m[1].startsWith('__')){ el('update-text').textContent=`新しいバージョン（${m[1]} 更新）が公開されています。`+(S.demo||S.over?'':'今の対戦が終わってから'); el('update-bar').hidden=false; }
+  }catch(e){}
+},60000);
+el('b-map').addEventListener('pointerdown',e=>{ e.preventDefault(); openBigMap(bm.hidden); });
+
 // ---------- screens ----------
 const overlay=el('overlay'), card=el('card');
 function showTitle(){
   card.innerHTML=`
-    <div class="eyebrow">CULTURE PLATE No.04 ／ 37°C</div>
+    <div class="eyebrow">CULTURE PLATE No.04 ／ 37°C ／ ${versionLabel()}</div>
     <h1>培養戦線<span class="sub">COLONY WARFARE</span></h1>
     <p class="lead">シャーレの中で4つの菌株が養分を奪い合う。どの株も細胞1つから始まる。あなたが動かすのはその元祖細胞だけ。分裂で生まれた細胞は、選んだモードに従って自分で動く。${MATCH_LABEL}後にいちばん多くのバイオマスを残した陣営が勝つ。</p>
     <ul class="rules">
@@ -1479,7 +1804,10 @@ function showTitle(){
       <li><span>F ／ 発射</span><span>元祖細胞から、自分の色のプラスミドを1つマウスの方向へ撃ち出す。当たった敵の細胞には、あなたの色のプラスミドが入り込む。味方に当てると、外来のプラスミドを1つ治す。外来がなければ空き枠に1つ補充する（どちらもない味方はすり抜ける）。外れたものは色つきのまましばらく漂う</span></li>
       <li><span>乗っ取り</span><span>細胞の中で他の色のプラスミドが自分の色より多くなると、その細胞はその陣営に寝返る。撃ち込まれた外来のプラスミドは、拾い直すか防御モードに治してもらうまで残る。色つきのものを拾うのも危険</span></li>
       <li><span>戦場の霧</span><span>見えるのは自分の細胞の周りだけ（元祖細胞は少し広い）。霧の外の敵の細胞・弾・色つきのプラスミドは見えない。全体マップは一度見た場所だけが明るくなる。養分・白いプラスミド・保護区はいつでも見える</span></li>
-      <li><span>白いトゲ</span><span>開始2分後にシャーレの中心に白いトゲが1体現れ、その後1分ごとに1体ずつ湧く。操作している元祖細胞を1.5倍の速さで追いかけてくる（オンラインではバイオマス上位2人を狙う）。触れた細胞は死ぬ。元祖細胞の弾を4発当てると倒せる（ほかの細胞は攻撃してくれない）。確保された保護区には入ってこない</span></li>
+      <li><span>チーム戦</span><span>オンライン対戦では、同じ色の席に何人でも座れる。同じ色の人どうしがチームで、それぞれが自分の元祖細胞（王冠）を操作する。子細胞は生んだ人の旗とモードに従う。チームの細胞どうしは乗っ取り合わず、弾を当てると回復・補充になる</span></li>
+      <li><span>拠点</span><span>シャーレに5か所（隣の陣営とのあいだに4か所と中心に大拠点）。中にいる細胞の数が一番多い陣営がゲージを進めて取る。持っている陣営の色のプラスミドが拠点の周りに湧く（中心は多め）</span></li>
+      <li><span>M ／ 全体マップ</span><span>Mキー（または右の全体マップをクリック）で大きなマップを開き、攻撃・防御・増殖の旗を置く。旗1本ならその周り、2本なら線の周り、3本以上なら囲んだ範囲の周りにそのモードの細胞が集まる。旗は1本ずつ／全部まとめて消せる。「乗り換え」で自分の細胞をクリックすると、その細胞を操作できる（5秒に1回）</span></li>
+      <li><span>白いトゲ</span><span>開始2分後にシャーレの中心に白いトゲが1体現れ、その後1分ごとに1体ずつ湧く。操作している元祖細胞を1.5倍の速さで追いかけてくる（オンラインではバイオマス上位2人を狙う）。触れた細胞は死ぬ。体力は4で、細胞にぶつかるたび、または元祖細胞の弾が当たるたびに1減り、0で消える（ほかの細胞の弾は効かない）。確保された保護区には入ってこない</span></li>
       <li><span>保護区</span><span>ときどき、一番弱い陣営の近くに計算盤の1マスが「保護区」として20秒だけ現れる（白い点線の正方形）。最初に入った陣営の色だけが入れ、他の色の細胞は押し出され、撃たれたプラスミドも跳ね返される</span></li>
     </ul>
     <div class="factions">${FACTIONS.map((f,i)=>`<span><i style="background:${f.color}"></i>${f.name}${i===0?'（あなた）':''}</span>`).join('')}</div>
@@ -1585,19 +1913,26 @@ function readRemoteInputs(){
   const here=new Set();
   for(const p of RM.R.peers()){
     if(p.sameTab) continue;
-    const seat=NET.seats[p.peer]; if(seat===undefined) continue;
-    here.add(seat);
+    const k=NET.seats[p.peer]; if(k===undefined || !PL[k]) continue;
+    here.add(k);
     const pr=p.presence, q=pr && pr.g===NET.g && pr.in;
     if(!q) continue;
-    const I=INP[seat];
+    const I=INP[k];
     I.x=clampN(q.x,-DISH_R,DISH_R); I.y=clampN(q.y,-DISH_R,DISH_R);
     I.fi=Math.max(I.fi,q.fi|0); I.m=MODES.includes(q.m)?q.m:'grow';
+    if(q.fl) applyRemoteFlags(k,q.fl);
+    if(q.sw && (q.sw.n|0)>SEEN[k].sw){ SEEN[k].sw=q.sw.n|0; applySwitch(k,q.sw.id|0); }
   }
   if(S.t<6) return;
-  for(const peer in NET.seats){
-    const seat=NET.seats[peer];
-    if(seat!==ME && HUM[seat] && !here.has(seat)){ HUM[seat]=false; toast((NAMES[seat]||FACTIONS[seat].name)+'が抜けたので、AIが引き継ぎます'); }
-  }
+  for(const peer in NET.seats){ const k=NET.seats[peer]; if(k!==MP && PL[k] && !PL[k].gone && !here.has(k)) playerLeft(k); }
+}
+// プレイヤーが抜けた：その人の細胞はチームの仲間が引き継ぐ。仲間がいなければ、その陣営はAIになる
+function playerLeft(k){
+  const p=PL[k]; p.gone=true;
+  const mate=PL.findIndex((q,j)=>j!==k && !q.gone && q.f===p.f);
+  for(const c of cells) if(c.pid===k){ c.pid=mate; if(mate>=0 && c.leader) c.leader=false; c.anchor=null; }
+  refreshTeams(); buildFrows();
+  toast((p.name||'プレイヤー')+'が抜けました。'+(mate>=0 ? '細胞はチームの仲間が引き継ぎます' : FACTIONS[p.f].name+'はAIが引き継ぎます'));
 }
 // ホスト：細胞・弾・漂うプラスミドは約0.16秒ごと、養分は1.5秒ごとに配る
 function hostBroadcast(now){
@@ -1610,14 +1945,15 @@ function sendSnap(){
   const sh=shots.slice(0,60).map(o=>encP(o.x)+encP(o.y)+enc((o.vx+1000)*1.9,2)+enc((o.vy+1000)*1.9,2)+o.f).join('');
   const dn=dnas.filter(d=>d.alive).slice(0,200).map(d=>encP(d.x)+encP(d.y)+(d.f+1)).join('');
   const strs=cells.map(c=>enc(c.id%238328,3)+encP(c.x)+encP(c.y)+enc(c.mass*4,2)
-    +B62[c.f*6+MODES.indexOf(c.mode)*2+(c.leader?1:0)]+enc(c.no,2)+B62[c.pl.length]+c.pl.join(''));
+    +B62[c.f*6+MODES.indexOf(c.mode)*2+(c.leader?1:0)]+enc(c.no,2)+B62[Math.max(-1,Math.min(60,c.pid))+1]+B62[c.pl.length]+c.pl.join(''));
   const chunks=[]; let cur='', lim=Math.max(600,CHUNK-sh.length-dn.length);
   for(const t of strs){ if(cur.length+t.length>lim){ chunks.push(cur); cur=''; lim=CHUNK; } cur+=t; }
   chunks.push(cur);
   const z=S.sanct;
-  const h={t:Math.round(S.time*10)/10, m:S.mass.map(Math.round), n:counts, nm:NAMES, hum:HUM.map(b=>b?1:0),
+  const h={t:Math.round(S.time*10)/10, m:S.mass.map(Math.round), n:counts, pl:PL.map(p=>[p.f,p.name,p.gone?1:0]),
            z: z ? [z.id, z.x, z.y, z.s, z.owner, z.for, Math.round(z.t*10)/10] : null,
-           k: S.spikes.map(k=>[k.id, Math.round(k.x), Math.round(k.y), k.hp, Math.round(k.rot*100)/100, k.flash>0?1:0])};
+           k: S.spikes.map(k=>[k.id, Math.round(k.x), Math.round(k.y), k.hp, Math.round(k.rot*100)/100, k.flash>0?1:0]),
+           b: S.bases.map(b=>[b.owner, b.cf, Math.round(b.prog*100)])};
   chunks.forEach((c,i)=>netEmit('snap', i===0 ? {g:NET.g,s,i,n:chunks.length,h,c,x:sh,d:dn} : {g:NET.g,s,i,n:chunks.length,c}));
 }
 function sendFood(){
@@ -1655,6 +1991,7 @@ function applySnap(parts){
     if(!prev || prev.id!==id) toast(`${FACTIONS[S.sanct.for].name}の近くに保護区が出現（${Math.ceil(t)}秒）`);
     else if(prev.owner<0 && S.sanct.owner>=0) toast(S.sanct.owner===ME ? '保護区を確保した。他の色は入れない' : `保護区は${FACTIONS[S.sanct.owner].name}が確保した`);
   } else S.sanct=null;
+  if(Array.isArray(h.b)) h.b.forEach((e,i)=>{ const b=S.bases[i]; if(b && Array.isArray(e)){ b.owner=Math.max(-1,Math.min(3,e[0]|0)); b.cf=Math.max(-1,Math.min(3,e[1]|0)); b.prog=clampN(e[2],0,100)/100; } });
   // 白いトゲ：位置は細胞と同じく、番号ごとに補間する
   const oldK=new Map((S.spikes||[]).map(k=>[k.id,k]));
   S.spikes=(Array.isArray(h.k)?h.k:[]).slice(0,20).filter(Array.isArray).map(e=>{
@@ -1663,18 +2000,22 @@ function applySnap(parts){
   });
   if(Array.isArray(h.m)) S.mass=[0,1,2,3].map(i=>+h.m[i]||0);
   if(Array.isArray(h.n)) counts=[0,1,2,3].map(i=>h.n[i]|0);
-  if(Array.isArray(h.nm)){ const nn=[0,1,2,3].map(i=>cleanName(h.nm[i])); if(nn.join('\n')!==NAMES.join('\n')){ NAMES=nn; buildFrows(); } }
+  // プレイヤー一覧（抜けた人の反映もここで）
+  if(Array.isArray(h.pl)){
+    const np=h.pl.slice(0,32).filter(Array.isArray).map(e=>({f:Math.min(3,Math.max(0,e[0]|0)), name:cleanName(e[1]), gone:!!e[2]})), key=JSON.stringify(np);
+    if(key!==NET.plKey){ NET.plKey=key; PL=np; while(INP.length<PL.length){ INP.push(blankInput()); SEEN.push({fi:0,sw:0}); } refreshTeams(); buildFrows(); }
+  }
   const prev=new Map(cells.map(c=>[c.id,c])), next=[];
   for(const p of parts){
     const s=typeof p.c==='string'?p.c:''; let i=0;
-    while(i+15<=s.length){
-      const id=dec(s,i,3), x=decP(s,i+3), y=decP(s,i+6), mass=dec(s,i+9,2)/4, fl=B62I[s[i+11]]||0, no=dec(s,i+12,2), len=Math.min(9,B62I[s[i+14]]||0);
-      const pl=[]; for(let k=0;k<len;k++) pl.push(Math.min(3,Math.max(0,+s[i+15+k]||0)));
-      i+=15+len;
+    while(i+16<=s.length){
+      const id=dec(s,i,3), x=decP(s,i+3), y=decP(s,i+6), mass=dec(s,i+9,2)/4, fl=B62I[s[i+11]]||0, no=dec(s,i+12,2), pid=(B62I[s[i+14]]||0)-1, len=Math.min(9,B62I[s[i+15]]||0);
+      const pl=[]; for(let k=0;k<len;k++) pl.push(Math.min(3,Math.max(0,+s[i+16+k]||0)));
+      i+=16+len;
       const o=prev.get(id), c=o||{id,seed:(id*.37)%10,axis:(id*1.7)%TAU,pop:0};
       c.fx=o?o.x:x; c.fy=o?o.y:y; c.tx=x; c.ty=y; if(!o){ c.x=x; c.y=y; }
       c.f=Math.min(3,Math.floor(fl/6)); c.mode=MODES[Math.floor(fl%6/2)]||'grow'; c.leader=!!(fl%2);
-      c.no=no; c.pl=pl; c.mass=mass; c.r=rad(mass);
+      c.no=no; c.pid=pid; c.pl=pl; c.mass=mass; c.r=rad(mass);
       next.push(c);
     }
   }
@@ -1683,7 +2024,8 @@ function applySnap(parts){
   for(let i=0;i+11<=xs.length;i+=11) shots.push({x:decP(xs,i),y:decP(xs,i+3),vx:dec(xs,i+6,2)/1.9-1000,vy:dec(xs,i+8,2)/1.9-1000,f:Math.min(3,+xs[i+10]||0)});
   dnas=[]; const ds=typeof parts[0].d==='string'?parts[0].d:'';
   for(let i=0;i+7<=ds.length;i+=7) dnas.push({x:decP(ds,i),y:decP(ds,i+3),f:Math.min(3,(+ds[i+6]||0)-1),alive:true,ttl:12,ph:i});
-  S.leaders=[null,null,null,null]; for(const c of cells) if(c.leader) S.leaders[c.f]=c;
+  S.leaders=[null,null,null,null]; S.pleaders=PL.map(()=>null);
+  for(const c of cells) if(c.leader){ if(c.pid>=0 && c.pid<S.pleaders.length) S.pleaders[c.pid]=c; if(!S.leaders[c.f]) S.leaders[c.f]=c; }
   NET.snapAt=performance.now();
 }
 function onFood(m){
@@ -1692,7 +2034,7 @@ function onFood(m){
   const s=parts.map(p=>typeof p.d==='string'?p.d:'').join(''); foods=[];
   for(let i=0;i+4<=s.length;i+=4) foods.push({x:dec(s,i,2)*FQ-DISH_R,y:dec(s,i+2,2)*FQ-DISH_R,v:1+(i%7)/5,alive:true,ph:i});
 }
-function onEv(m){ const d=m.data; if(d && S.net==='client' && d.g===NET.g && d.to===ME) toast(String(d.msg||'').slice(0,40)); }
+function onEv(m){ const d=m.data; if(d && S.net==='client' && d.g===NET.g && d.to===MP) toast(String(d.msg||'').slice(0,40)); }
 function onEnd(m){
   const d=m.data; if(!d || S.net!=='client' || d.g!==NET.g || S.over) return;
   S.over=true;
@@ -1706,7 +2048,7 @@ function clientFrame(dt){
   for(const s of shots){ s.x+=s.vx*dt; s.y+=s.vy*dt; }
   if(S.sanct) S.sanct.t=Math.max(0,S.sanct.t-dt);
   for(const k of S.spikes){ k.x=k.fx+(k.tx-k.fx)*a; k.y=k.fy+(k.ty-k.fy)*a; }
-  const L=spectating() ? (S.follow>=0 ? S.leaders[S.follow] : null) : (ME>=0 ? S.leaders[ME] : null), k=Math.min(1,dt*3);
+  const L=spectating() ? (S.follow>=0 ? S.leaders[S.follow] : null) : (MP>=0 ? S.pleaders[MP] : null), k=Math.min(1,dt*3);
   if(L){
     const zt=Math.max(.35,Math.min(1.2,Math.min(vw,vh)/(L.r*14+460)));
     S.cam.x+=(L.x-S.cam.x)*k; S.cam.y+=(L.y-S.cam.y)*k; S.cam.z+=(zt-S.cam.z)*Math.min(1,dt*1.5);
@@ -1715,9 +2057,9 @@ function clientFrame(dt){
     S.cam.z+=(Math.min(vw,vh)/(DISH_R*2.1)-S.cam.z)*dt*2;
   }
   if(ME>=0 && RM.R){
-    const mw=screenToWorld(pointer.x,pointer.y), I=INP[ME];
+    const mw=screenToWorld(pointer.x,pointer.y), I=INP[MP];
     I.x=mw.x; I.y=mw.y; I.m=selMode;
-    RM.R.presence({g:NET.g, in:{x:Math.round(I.x),y:Math.round(I.y),fi:I.fi,m:I.m}}).catch(()=>{});
+    RM.R.presence({g:NET.g, in:{x:Math.round(I.x),y:Math.round(I.y),fi:I.fi,m:I.m,fl:flagsForNet(),sw:I.sw}}).catch(()=>{});
   }
   if(now-NET.lastRecv>6000) netLost();
 }
@@ -1859,17 +2201,18 @@ function roomPresence(){
   const cd = RM.host && RM.cdAt ? Math.max(0,Math.ceil((RM.cdAt-performance.now())/1000)) : null;
   RM.R.presence({seat:RM.seat, name:LOB.name, host:RM.host||null, ai:RM.host?RM.ai:null, cd, here:NET.inRoom?1:null, g:null, in:null}).catch(()=>{});
 }
-// 席の状態：人（先に座った人）＞ AI（ホストの設定）＞ 空き
+// 席（色）の状態：人がいれば人（同じ色に何人でも＝チーム）、いなければホストの設定でAIか空き
 function seatsState(){
   const peers=RM.R ? RM.R.peers() : [];
   const hostP=peers.find(p=>p.presence && p.presence.host);
   const ai=hostP && Array.isArray(hostP.presence.ai) ? [0,1,2,3].map(i=>!!hostP.presence.ai[i]) : [false,false,false,false];
-  const st=[0,1,2,3].map(i=>({kind:ai[i]?'ai':'open'}));
+  const st=[0,1,2,3].map(i=>({kind:ai[i]?'ai':'open', list:[], me:false, away:false}));
   for(const p of peers){
     const s=p.presence && p.presence.seat;
-    if(!(Number.isInteger(s) && s>=0 && s<4) || st[s].kind==='human') continue;
-    // away：席はあるが、まだ前の対戦の結果画面を見ている（ルーム画面に戻っていない）
-    st[s]={kind:'human', peer:p.peer, name:cleanName(p.presence.name), me:p.sameTab, away:!p.sameTab && !p.presence.here};
+    if(!(Number.isInteger(s) && s>=0 && s<4)) continue;
+    // away：まだ前の対戦の結果画面を見ている（ルーム画面に戻っていない）
+    const who={peer:p.peer, name:cleanName(p.presence.name), me:p.sameTab, away:!p.sameTab && !p.presence.here};
+    const t=st[s]; t.kind='human'; t.list.push(who); if(who.me) t.me=true; if(who.away) t.away=true;
   }
   return {st, hostP, cd:hostP ? hostP.presence.cd : null};
 }
@@ -1893,19 +2236,17 @@ function showRoom(){
     else if(RM.host){ RM.ai[s]=b.dataset.act==='ai'; RM.blocked=false; }
     roomPresence(); renderRoom();
   });
-  el('lob-live').addEventListener('click',()=>{ if(NET.liveG) beginNet('client',NET.liveG,{},['','','',''],-1); });
+  el('lob-live').addEventListener('click',()=>{ if(NET.liveG) beginNet('client',NET.liveG,[],-1); });
   el('room-leave').addEventListener('click',()=>{ leaveRoom(); showLobby(); });
   RM.html=''; renderRoom();
 }
 function renderRoom(){
   if(!NET.inRoom || !el('room-seats')) return;
   const {st,hostP,cd}=seatsState();
-  // 自分が選んだ席に先客がいたら、座っていない状態に戻す
-  if(RM.seat>=0 && st[RM.seat].kind==='human' && !st[RM.seat].me){ RM.seat=-1; roomPresence(); }
   const html=st.map((s,i)=>{
-    const f=FACTIONS[i], who = s.kind==='human' ? esc(s.name||'名前なし')+(s.me?'（あなた）':'')+(s.away?'（結果画面を見ています）':'') : s.kind==='ai' ? 'AI' : '空き';
+    const f=FACTIONS[i], who = s.kind==='human' ? s.list.map(w=>esc(w.name||'名前なし')+(w.me?'（あなた）':'')+(w.away?'（結果画面）':'')).join('、')+(s.list.length>1?`（${s.list.length}人チーム）`:'') : s.kind==='ai' ? 'AI' : '空き';
     const acts=[];
-    if(s.kind!=='human') acts.push(`<button type="button" class="mini" data-act="sit" data-seat="${i}">ここに座る</button>`);
+    if(!s.me) acts.push(`<button type="button" class="mini" data-act="sit" data-seat="${i}">${s.kind==='human'?'このチームに入る':'ここに座る'}</button>`);
     if(s.me) acts.push(`<button type="button" class="mini" data-act="stand" data-seat="${i}">席を立つ</button>`);
     if(RM.host && s.kind!=='human') acts.push(`<button type="button" class="mini" data-act="${s.kind==='ai'?'open':'ai'}" data-seat="${i}">${s.kind==='ai'?'空きにする':'AIにする'}</button>`);
     return `<div class="seat-card ${s.kind}${s.me?' mine':''}"><b><i style="background:${f.color}"></i>${f.name}</b><small>${who}</small><div class="acts">${acts.join('')}</div></div>`;
@@ -1915,7 +2256,8 @@ function renderRoom(){
   el('room-lead').textContent = RM.host
     ? (P2P ? `あなたがホストです。ルームコード「${RM.code}」を一緒に遊ぶ人に伝えてください。` : `あなたがホストです。ほかの人はロビーの一覧からこのルームに参加できます。`)
       + `空いた席は「AIにする」でAIに任せられます。対戦中のゲームはあなたの画面で動くので、終わるまでこのタブを開いたままにしてください。`
-    : `ホスト：${hostP ? (cleanName(hostP.presence.name)||'名前なし') : '（いません）'}。空いている席を選んで座ってください。`;
+    : `ホスト：${hostP ? (cleanName(hostP.presence.name)||'名前なし') : '（いません）'}。好きな色の席に座ってください。`;
+  el('room-lead').textContent += '同じ色に座った人どうしがチームになり、それぞれが自分の元祖細胞を操作します。';
   if(!hostP && !RM.host) roomStatus('ホストがルームにいません。ルームを出て、作り直してください。');
   else if(cd!=null) roomStatus(`全員そろいました。開始まで ${cd} 秒`);
   else if(RM.blocked && RM.host) roomStatus(RM.blockMsg||'開始できませんでした。');
@@ -1931,40 +2273,42 @@ function roomTick(now){
   if(!full){ RM.cdAt=0; RM.blocked=false; }
   else if(!RM.cdAt && !RM.blocked) RM.cdAt=now+3000;
   const cd=RM.cdAt ? Math.max(0,Math.ceil((RM.cdAt-now)/1000)) : null;
-  if(cd!==RM.lastCd || humans!==RM.lastN){ RM.lastCd=cd; RM.lastN=humans; roomPresence(); lobbyPresence(); }
+  const people=st.reduce((a,s)=>a+s.list.length,0);
+  if(cd!==RM.lastCd || people!==RM.lastN){ RM.lastCd=cd; RM.lastN=people; roomPresence(); lobbyPresence(); }
   if(RM.cdAt && now>=RM.cdAt){ RM.cdAt=0; RM.blocked=true; hostStart(st); }
 }
 async function hostStart(st){
-  const seats={}, names=['','','',''];
-  st.forEach((s,i)=>{ if(s.kind==='human'){ seats[s.peer]=i; names[i]=s.name||('プレイヤー'+(i+1)); } });
-  const mine=st.findIndex(s=>s.me);
+  // プレイヤー一覧：[peer, 色, 名前]。同じ色が複数あればチーム
+  const players=[];
+  st.forEach((s,i)=>{ for(const w of s.list) players.push([w.peer, i, w.name||('プレイヤー'+(players.length+1))]); });
+  const mine=players.findIndex(p=>{ const w=st[p[1]].list.find(x=>x.peer===p[0]); return w && w.me; });
   const g=Math.random().toString(36).slice(2,10);
-  try{ await RM.R.emit('start',{g,seats,names}); }
+  try{ await RM.R.emit('start',{g,players}); }
   catch(e){
     RM.blockMsg = e && e.code==='not_permitted'
       ? '対戦を開始できるのは、このページの共同編集者（Contributor）以上の人だけです。開始できる人にルームを作ってもらってください。'
       : '開始できませんでした。席を座り直すともう一度数え始めます。';
     renderRoom(); return;
   }
-  beginNet('host',g,seats,names,mine);
+  beginNet('host',g,players,mine);
 }
 function onStart(m){
   const d=m.data; if(m.sameTab || !d || typeof d!=='object' || !NET.inRoom || !RM.R) return;
-  const me=RM.R.peers().find(p=>p.sameTab), seats=d.seats && typeof d.seats==='object' ? d.seats : {};
-  const seat=me && seats[me.peer]!==undefined ? Math.min(3,seats[me.peer]|0) : -1;
-  beginNet('client', String(d.g||''), seats, Array.isArray(d.names)?d.names:['','','',''], seat);
+  const me=RM.R.peers().find(p=>p.sameTab), players=Array.isArray(d.players) ? d.players.slice(0,32).filter(Array.isArray) : [];
+  beginNet('client', String(d.g||''), players, me ? players.findIndex(p=>p[0]===me.peer) : -1);
 }
-function beginNet(role,g,seats,names,me){
+// players：[peer, 色, 名前] の並び。mp：この画面のプレイヤー番号（-1 は観戦）
+function beginNet(role,g,players,mp){
   NET.inLobby=false; NET.inRoom=false; RM.host=role==='host' && RM.host; lobbyPresence();
   if(RM.R) RM.R.presence({here:null}).catch(()=>{});
-  NET.g=g; NET.seats={}; for(const k in seats) NET.seats[k]=Math.min(3,Math.max(0,seats[k]|0));
+  NET.g=g; NET.seats={}; NET.plKey=''; players.forEach((p,k)=>{ NET.seats[String(p[0])]=k; });
   NET.lastRecv=performance.now(); NET.snapAt=0; NET.buf=null; NET.fbuf=null; NET.applied=0; NET.fapplied=0; NET.lastSnap=0; NET.lastFood=0;
-  const hum=[0,1,2,3].map(s=>Object.values(NET.seats).includes(s));
   overlay.hidden=true; setWatchUI(false);
-  newGame(false,false,{net:role, me:me??-1, hum, names:[0,1,2,3].map(i=>cleanName(names[i]))});
-  if(role==='client'){ cells=[]; foods=[]; dnas=[]; shots=[]; S.leaders=[null,null,null,null]; }
+  newGame(false,false,{net:role, players:players.map(p=>({f:p[1]|0, name:p[2]})), mp:mp>=0?mp:-1});
+  if(role==='client'){ cells=[]; foods=[]; dnas=[]; shots=[]; S.leaders=[null,null,null,null]; S.pleaders=PL.map(()=>null); }
   el('sec-mode').hidden=ME<0; el('my-stats').hidden=ME<0;
-  toast(ME>=0 ? `${FACTIONS[ME].name}として参加` : '観戦として参加');
+  const mates=ME>=0 ? PL.filter((p,k)=>k!==MP && p.f===ME).length : 0;
+  toast(ME>=0 ? `${FACTIONS[ME].name}として参加`+(mates?`（${mates+1}人チーム）`:'') : '観戦として参加');
   if(role==='host') startBgClock();
 }
 // ---------- claude.ai の外（普通のWebサイト）での通信：WebRTC（PeerJS） ----------
@@ -2094,6 +2438,7 @@ function frame(now){
   if(NET.inRoom) roomTick(now);
   if((NET.inLobby||NET.inRoom) && (now|0)%500<20) renderLobby();
   render();
+  drawBigMap();
   hudT-=dt; if(hudT<=0){ hudT=.2; updateHUD(); }
   if(toastT>0){ toastT-=dt; if(toastT<=0) toastEl.classList.remove('show'); }
   requestAnimationFrame(frame);
