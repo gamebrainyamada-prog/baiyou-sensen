@@ -164,9 +164,7 @@ h1 .sub{display:block;font-size:.3em;color:var(--dim);letter-spacing:.3em;margin
   <div id="stage">
     <canvas id="cv"></canvas>
     <div id="touch">
-      <button id="b-split" type="button">分裂</button>
       <button id="b-fire" type="button">発射</button>
-      <button id="b-fuse" type="button">融合</button>
     </div>
     <div id="toast"></div>
   </div>
@@ -225,7 +223,7 @@ h1 .sub{display:block;font-size:.3em;color:var(--dim);letter-spacing:.3em;margin
 
     <section class="sec keys" id="sec-keys">
       <div class="hud-title">操作</div>
-      <div>マウス：元祖細胞（点線の輪）が泳ぐ方向<br><kbd>Space</kbd> 分裂　<kbd>F</kbd>／右クリック 発射<br><kbd>Shift</kbd> 長押し 融合　<kbd>1</kbd><kbd>2</kbd><kbd>3</kbd> モード</div>
+      <div>マウス：元祖細胞（点線の輪）が泳ぐ方向<br><kbd>F</kbd>／右クリック 発射　<kbd>1</kbd><kbd>2</kbd><kbd>3</kbd> モード</div>
     </section>
   </aside>
 </div>
@@ -255,6 +253,8 @@ const MIN_SPLIT = 36, P_MAX = 9, DNA_N = 90, CAP = 100, FOOD_N = 1900, MATCH_TIM
 const FOOD_START = 600, FOOD_RAMP = 200;
 const MATCH_LABEL = `${MATCH_TIME/60}分`;
 const SPEED = 150;
+// プラスミドが容量いっぱいのときの養分の吸収率（次の容量へ育つ速さ）
+const FULL_BONUS = 1.2;
 // 抗生物質イベント（一時的に停止中。true で復活）
 const USE_ANTIBIOTIC = false;
 
@@ -268,8 +268,8 @@ let selMode='grow';
 function pickMode(f){ const m=FACTIONS[f].mix; let r=Math.random(); for(const k in m){ r-=m[k]; if(r<=0) return k; } return 'grow'; }
 // 人が操作する陣営と、その入力。この画面の操作は INP[ME] に、オンラインの参加者の操作は presence から入る
 let ME=0, HUM=[true,false,false,false], NAMES=['','','',''];
-const blankInput=()=>({x:0,y:0,fu:false,sp:0,fi:0,m:'grow'});
-let INP=[0,1,2,3].map(blankInput), SEEN=[0,1,2,3].map(()=>({sp:0,fi:0}));
+const blankInput=()=>({x:0,y:0,fi:0,m:'grow'});
+let INP=[0,1,2,3].map(blankInput), SEEN=[0,1,2,3].map(()=>({fi:0}));
 const human = f => !S.demo && HUM[f];
 const modeFor = f => human(f) ? INP[f].m : pickMode(f);
 // AIの陣営は全体の能力（速さ・発射の間隔）を0.9倍にする
@@ -307,7 +307,7 @@ let cells=[], foods=[], dnas=[], shots=[], parts=[], zones=[], S, counts=[0,0,0,
 function newGame(demo, watch=false, opts={}){
   cells=[]; foods=[]; dnas=[]; shots=[]; parts=[]; zones=[];
   ME = opts.me ?? 0; HUM = opts.hum || [true,false,false,false]; NAMES = opts.names || ['','','',''];
-  INP=[0,1,2,3].map(blankInput); SEEN=[0,1,2,3].map(()=>({sp:0,fi:0}));
+  INP=[0,1,2,3].map(blankInput); SEEN=[0,1,2,3].map(()=>({fi:0}));
   S = {t:0, time:MATCH_TIME, over:false, demo, watch, net:opts.net||null, nameNo:[0,0,0,0], follow:-1, speed:1, nextZone:18, sanct:null, nextSanct:45, sanctId:0, eaten:0, peak:0, splits:0, dnaGot:0, converted:0, hijacked:0,
        cam:{x:0,y:0,z:demo?0.32:0.9}, mass:[0,0,0,0], out:[false,false,false,false], leaders:[null,null,null,null]};
   for(let i=0;i<FOOD_N;i++){
@@ -370,15 +370,6 @@ function divide(c,dx,dy,power,force){
   checkConvert(c); checkConvert(n);
   return n;
 }
-function merge(a,b){
-  const m=a.mass+b.mass;
-  a.x=(a.x*a.mass+b.x*b.mass)/m; a.y=(a.y*a.mass+b.y*b.mass)/m;
-  a.mass=m; a.r=rad(m); a.fuseCd=.6;
-  a.pl=a.pl.concat(b.pl).sort((x,y)=>(y===a.f)-(x===a.f)).slice(0,Math.min(P_MAX-1,capOf(m))); a.splitCd=Math.max(a.splitCd,1); a.pop=.5;
-  a.leader=a.leader||b.leader;
-  b.dead=true; counts[b.f]--;
-  checkConvert(a);
-}
 // 漂うプラスミドを取り込めるか：空き枠がある、または自分の色になるもので外来を治せる
 function canTake(c,dn){
   if(c.pl.length<holdCap(c)) return true;
@@ -435,8 +426,6 @@ function burst(x,y,color,n,sp){
 // 分裂で生まれた細胞：モードに従って1つずつ自分で動く（全陣営共通）
 function steerMode(c,dt){
   const L=S.leaders[c.f];
-  // 融合中はプレイヤーの細胞が元祖細胞のもとへ集まる
-  if(human(c.f) && INP[c.f].fu && L){ setDir(c,L.x-c.x,L.y-c.y); return; }
   if(c.mode==='atk') steerAttack(c,dt);
   else if(c.mode==='def') steerDefend(c,dt,L);
   else steerGrow(c,dt);
@@ -448,8 +437,6 @@ function steerAI(c,dt){
   c.think-=dt; if(c.think>0) return;
   c.think=rand(.18,.36);
   const f=FACTIONS[c.f];
-  // AIの元祖細胞は、プレイヤーの Space と同じように大きくなったら分裂して子を出す
-  if(c.leader && c.mass>=70 && c.splitCd<=0 && Math.random()<.2){ const a=Math.random()*TAU; divide(c,Math.cos(a),Math.sin(a),420); }
   // 抗生物質ゾーンから逃げる
   for(const z of zones){
     const d=Math.hypot(c.x-z.x,c.y-z.y);
@@ -621,7 +608,7 @@ function steerDefend(c,dt,L){
     });
     c.ally=best; c.guard=guard||L;
   }
-  if(c.ally && !c.ally.dead && c.ally.f===c.f && ownCount(c)>=2){ setDir(c,c.ally.x-c.x,c.ally.y-c.y); return; }
+  if(c.ally && !c.ally.dead && c.ally.f===c.f && ownCount(c)>=2 && canFire(c)){ setDir(c,c.ally.x-c.x,c.ally.y-c.y); return; }
   const g=c.guard && !c.guard.dead && c.guard.f===c.f ? c.guard : L;
   if(g && Math.hypot(g.x-c.x,g.y-c.y)>g.r+c.r+120){ setDir(c,g.x-c.x,g.y-c.y); return; }
   seekFood(c,g);
@@ -644,21 +631,12 @@ function setMode(m){ selMode=m; modeBtns.forEach(b=>b.setAttribute('aria-pressed
 modeBtns.forEach(b=>b.addEventListener('click',()=>setMode(b.dataset.mode)));
 addEventListener('keydown',e=>{ if(typing(e)) return; const m={Digit1:'atk',Digit2:'def',Digit3:'grow'}[e.code]; if(m) setMode(m); });
 cv.addEventListener('contextmenu',e=>e.preventDefault());
-let shiftHeld=false, btnFuse=false;
 addEventListener('keydown',e=>{
   if(typing(e)) return;
-  if(e.code==='Space'){ e.preventDefault(); if(playing()) INP[ME].sp++; }
-  if(e.key==='Shift'||e.code==='KeyE'){ shiftHeld=true; }
   if(e.code==='KeyF'){ if(playing()) INP[ME].fi++; }
   if(e.code==='Enter' && !playing() && !(S.watch && !S.over) && !S.net && !NET.inLobby && !NET.inRoom) startGame();
 });
-addEventListener('keyup',e=>{ if(e.key==='Shift'||e.code==='KeyE') shiftHeld=false; });
-addEventListener('blur',()=>{shiftHeld=false;btnFuse=false;});
-const bSplit=document.getElementById('b-split'), bFuse=document.getElementById('b-fuse');
-bSplit.addEventListener('pointerdown',e=>{e.preventDefault(); if(playing()) INP[ME].sp++;});
 document.getElementById('b-fire').addEventListener('pointerdown',e=>{e.preventDefault(); if(playing()) INP[ME].fi++;});
-bFuse.addEventListener('pointerdown',e=>{e.preventDefault(); btnFuse=true; bFuse.classList.add('on');});
-['pointerup','pointercancel','pointerleave'].forEach(t=>bFuse.addEventListener(t,()=>{btnFuse=false;bFuse.classList.remove('on');}));
 const playing = () => S && !S.demo && !S.over && ME>=0;
 
 // ---------- toast ----------
@@ -675,7 +653,7 @@ function update(dt){
   S.t+=dt; if(!S.demo || S.watch) S.time-=dt;
   // この画面の操作を自分の陣営の入力欄へ。ホストは参加者の操作も読み込む
   const mw=screenToWorld(pointer.x,pointer.y);
-  if(ME>=0 && !S.demo){ const I=INP[ME]; I.x=mw.x; I.y=mw.y; I.fu=shiftHeld||btnFuse; I.m=selMode; }
+  if(ME>=0 && !S.demo){ const I=INP[ME]; I.x=mw.x; I.y=mw.y; I.m=selMode; }
   if(S.net==='host') readRemoteInputs();
   counts=[0,0,0,0]; for(const c of cells) counts[c.f]++;
   cellGrid=buildGrid(cells); foodGrid=buildGrid(foods);
@@ -715,7 +693,6 @@ function update(dt){
   for(let f=0;f<FACTIONS.length;f++){
     if(!human(f)) continue;
     const I=INP[f], L=S.leaders[f], seen=SEEN[f];
-    if(I.sp>seen.sp){ seen.sp=I.sp; if(L) divide(L,I.x-L.x,I.y-L.y,640); }
     if(I.fi>seen.fi){
       seen.fi=I.fi;
       if(L && L.fireCd<=0){
@@ -760,7 +737,8 @@ function update(dt){
   for(const c of cells){
     if(c.dead) continue;
     query(foodGrid,c.x,c.y,c.r+4,fd=>{
-      if(fd.alive && (fd.x-c.x)**2+(fd.y-c.y)**2<c.r*c.r){ fd.alive=false; fd.respawn=rand(2,8); c.mass+=fd.v; }
+      // プラスミドが容量いっぱいの細胞は、次の容量の大きさへ早く届くよう吸収を少し多くする
+      if(fd.alive && (fd.x-c.x)**2+(fd.y-c.y)**2<c.r*c.r){ fd.alive=false; fd.respawn=rand(2,8); c.mass+=fd.v*(c.pl.length>=capOf(c.mass)?FULL_BONUS:1); }
     });
   }
   // 浮遊プラスミドの取り込み
@@ -843,7 +821,8 @@ function update(dt){
     c.giveCd-=dt;
     const o=c.ally;
     if(o.dead || o.f!==c.f){ c.ally=null; continue; }
-    if(c.giveCd>0 || Math.hypot(o.x-c.x,o.y-c.y)>c.r+o.r+24 || ownCount(c)<2) continue;
+    // 渡したあとも自分の色が他のどの色にも負けないときだけ渡す（渡して自分が乗っ取られないように）
+    if(c.giveCd>0 || Math.hypot(o.x-c.x,o.y-c.y)>c.r+o.r+24 || ownCount(c)<2 || !canFire(c)) continue;
     const fi=o.pl.findIndex(q=>q!==o.f);
     if(fi<0 && o.pl.length>=capOf(o.mass)){ c.ally=null; continue; }
     c.pl.splice(c.pl.lastIndexOf(c.f),1);
@@ -853,15 +832,13 @@ function update(dt){
     checkConvert(c); checkConvert(o);
   }
 
-  // 細胞同士：押し合い・融合（他陣営とも押し合うだけで、食べることはできない）
+  // 細胞同士：押し合うだけ（食べたり合体したりはしない）
   for(const c of cells){
     if(c.dead) continue;
     query(cellGrid,c.x,c.y,c.r+60,o=>{
       if(o===c||o.dead||c.dead) return;
       const dx=o.x-c.x, dy=o.y-c.y, d=Math.hypot(dx,dy);
-      if(o.f===c.f && human(c.f) && INP[c.f].fu){
-        if(c.fuseCd<=0 && o.fuseCd<=0 && c.mass>=o.mass && d<c.r*.75) merge(c,o);
-      } else if(d<c.r+o.r && d>.01){
+      if(d<c.r+o.r && d>.01){
         const ov=(c.r+o.r-d)*(o.f===c.f?.25:.4), ux=dx/d, uy=dy/d;
         const wc=o.mass/(c.mass+o.mass), wo=1-wc;
         c.x-=ux*ov*wc*2; c.y-=uy*ov*wc*2; o.x+=ux*ov*wo*2; o.y+=uy*ov*wo*2;
@@ -1288,14 +1265,12 @@ function showTitle(){
     <ul class="rules">
       <li><span>移動</span><span>マウス（タッチ）の方向へ、元祖細胞（外側に点線の輪がある細胞）が泳ぐ。元祖細胞が失われると、一番大きい細胞が引き継ぐ</span></li>
       <li><span>1 2 3 ／ モード</span><span>右のパネルで、次に生まれる細胞のモードを選ぶ。生まれた細胞はそれぞれ単独で動く。攻撃＝敵を探して撃ち、撃ち切ったら逃げて補給する（分裂しない）、防御＝防御以外の味方に付き添い、プラスミドを渡して守る、増殖＝敵を避けて養分を集め自分で増える。中心の印（▲ 盾 ＋）でモードが分かる。敵の株も同じ仕組みで動く</span></li>
-      <li><span>成長</span><span>緑の粒（養分）を取り込むと細胞が大きくなり、プラスミドの容量が 3 → 5 → 7 → 9 個と増える。縮むと、あふれたプラスミドは外へ出ていく</span></li>
+      <li><span>成長</span><span>緑の粒（養分）を取り込むと細胞が大きくなり、プラスミドの容量が 3 → 5 → 7 → 9 個と増える。プラスミドが容量いっぱいのときは、養分を少し多く吸収して次の大きさへ早く育つ。縮むと、あふれたプラスミドは外へ出ていく</span></li>
       <li><span>プラスミド</span><span>細胞の中の、ハートが入った角丸の四角（薄い枠は空き）。自分では増えない。漂う白いプラスミドを拾うか、防御モードの味方から渡されたときだけ増える。外来のプラスミドが入っているときに拾うと、外来のものから優先して治る（枠がいっぱいでも拾える）。容量9の細胞が9個そろうと、4個と5個の2細胞に分裂する</span></li>
       <li><span>F ／ 発射</span><span>元祖細胞から、自分の色のプラスミドを1つマウスの方向へ撃ち出す。当たった敵の細胞には、あなたの色のプラスミドが入り込む。外来のプラスミドが入った味方に当てると、それを1つ治す（治すものがない味方はすり抜ける）。外れたものは色つきのまましばらく漂う</span></li>
       <li><span>乗っ取り</span><span>細胞の中で他の色のプラスミドが自分の色より多くなると、その細胞はその陣営に寝返る。撃ち込まれた外来のプラスミドは、拾い直すか防御モードに治してもらうまで残る。色つきのものを拾うのも危険</span></li>
-      <li><span>Space ／ 分裂</span><span>元祖細胞を今すぐ分裂させ、マウスの方向へ子細胞を打ち出す（ある程度の大きさが必要）。子細胞は選んでいるモードで動き出す</span></li>
       <li><span>戦場の霧</span><span>見えるのは自分の細胞の周りだけ（元祖細胞は少し広い）。霧の外の敵の細胞・弾・色つきのプラスミドは見えない。全体マップは一度見た場所だけが明るくなる。養分・白いプラスミド・保護区はいつでも見える</span></li>
       <li><span>保護区</span><span>ときどき、一番弱い陣営の近くに計算盤の1マスが「保護区」として20秒だけ現れる（白い点線の正方形）。最初に入った陣営の色だけが入れ、他の色の細胞は押し出され、撃たれたプラスミドも跳ね返される</span></li>
-      <li><span>Shift ／ 融合</span><span>押している間、仲間の細胞が元祖細胞のもとへ集まって合体し、大きな1つの細胞になる（プラスミドは合計されるが最大8個）</span></li>
     </ul>
     <div class="factions">${FACTIONS.map((f,i)=>`<span><i style="background:${f.color}"></i>${f.name}${i===0?'（あなた）':''}</span>`).join('')}</div>
     <div class="btns"><button class="btn" id="go" type="button">培養開始</button><button class="btn ghost" id="online" type="button">オンライン対戦</button><button class="btn ghost" id="watch" type="button">AI同士の対戦を見る</button></div>`;
@@ -1384,8 +1359,8 @@ function readRemoteInputs(){
     const pr=p.presence, q=pr && pr.g===NET.g && pr.in;
     if(!q) continue;
     const I=INP[seat];
-    I.x=clampN(q.x,-DISH_R,DISH_R); I.y=clampN(q.y,-DISH_R,DISH_R); I.fu=!!q.fu;
-    I.sp=Math.max(I.sp,q.sp|0); I.fi=Math.max(I.fi,q.fi|0); I.m=MODES.includes(q.m)?q.m:'grow';
+    I.x=clampN(q.x,-DISH_R,DISH_R); I.y=clampN(q.y,-DISH_R,DISH_R);
+    I.fi=Math.max(I.fi,q.fi|0); I.m=MODES.includes(q.m)?q.m:'grow';
   }
   if(S.t<6) return;
   for(const peer in NET.seats){
@@ -1502,8 +1477,8 @@ function clientFrame(dt){
   }
   if(ME>=0 && RM.R){
     const mw=screenToWorld(pointer.x,pointer.y), I=INP[ME];
-    I.x=mw.x; I.y=mw.y; I.fu=shiftHeld||btnFuse; I.m=selMode;
-    RM.R.presence({g:NET.g, in:{x:Math.round(I.x),y:Math.round(I.y),fu:I.fu?1:0,sp:I.sp,fi:I.fi,m:I.m}}).catch(()=>{});
+    I.x=mw.x; I.y=mw.y; I.m=selMode;
+    RM.R.presence({g:NET.g, in:{x:Math.round(I.x),y:Math.round(I.y),fi:I.fi,m:I.m}}).catch(()=>{});
   }
   if(now-NET.lastRecv>6000) netLost();
 }
@@ -1738,6 +1713,7 @@ function beginNet(role,g,seats,names,me){
   if(role==='client'){ cells=[]; foods=[]; dnas=[]; shots=[]; S.leaders=[null,null,null,null]; }
   el('sec-mode').hidden=ME<0; el('my-stats').hidden=ME<0;
   toast(ME>=0 ? `${FACTIONS[ME].name}として参加` : '観戦として参加');
+  if(role==='host') startBgClock();
 }
 // ---------- claude.ai の外（普通のWebサイト）での通信：WebRTC（PeerJS） ----------
 // アカウントなしで遊べるように、ブラウザ同士を直接つなぐ。ホストの画面が中継役になる星形のつながりで、
@@ -1841,7 +1817,24 @@ const P2P = !(window.claude && window.claude.use) && typeof window.Peer==='funct
 
 // ---------- loop ----------
 let last=performance.now();
+// ホストのタブが裏に回ると requestAnimationFrame が止まるので、その間は Web Worker の時計でゲームを進めて配り続ける
+// （Worker の時計は裏のタブでもほとんど間引かれない）。「裏に回った」の判定は document.hidden に頼らず、
+// 画面の更新が0.25秒以上止まっているかで見る（裏でも hidden にならない環境があるため）。表に戻ったら通常のループに戻る
+let bgWorker=null, lastRaf=performance.now();
+function startBgClock(){
+  if(bgWorker || typeof Worker==='undefined' || typeof Blob==='undefined') return;
+  try{
+    const url=URL.createObjectURL(new Blob(['setInterval(function(){postMessage(0)},33)'],{type:'text/javascript'}));
+    bgWorker=new Worker(url);
+    bgWorker.onmessage=()=>{
+      if(S.net!=='host' || S.over || performance.now()-lastRaf<250) return;
+      const now=performance.now(), dt=Math.min(.05,(now-last)/1000); last=now;
+      update(dt); hostBroadcast(now);
+    };
+  }catch(e){ bgWorker=null; }
+}
 function frame(now){
+  lastRaf=performance.now();
   const dt=Math.min(.05,(now-last)/1000); last=now;
   if(S.net==='client'){ if(!S.over) clientFrame(dt); }
   else if(!S.over){ const n=S.watch?S.speed:1; for(let i=0;i<n && !S.over;i++) update(dt); }
