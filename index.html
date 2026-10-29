@@ -307,7 +307,7 @@ const MIN_SPLIT = 36, P_MAX = 9, DNA_N = 130, CAP = Infinity, FOOD_N = 2800, MAT
 const FOOD_START = 880, FOOD_RAMP = 200;
 const MATCH_LABEL = `${MATCH_TIME/60}分`;
 // バージョン：BUILD は単体版を作るとき（build-standalone.js）に作成日時で置き換わる
-const APP_VERSION='2.9', BUILD='2026/10/29 17:24';
+const APP_VERSION='2.10', BUILD='2026/10/29 17:42';
 const versionLabel = () => `Ver ${APP_VERSION}`+(BUILD.startsWith('__')?'':`（${BUILD} 更新）`);
 const SPEED = 150;
 // プラスミドが容量いっぱいのときの養分の吸収率（次の容量へ育つ速さ）
@@ -2689,7 +2689,7 @@ function showRoom(){
     ${RM.host ? aiLevelField() : ''}
     <div class="seats" id="room-seats"></div>
     <p class="note" id="lob-status"></p>
-    <div class="btns"><button class="btn ghost" id="lob-live" type="button" hidden>進行中の対戦を観戦</button><button class="btn ghost" id="room-leave" type="button">ルームを出る</button></div>`;
+    <div class="btns">${RM.host?'<button class="btn" id="room-start" type="button">スタート</button>':''}<button class="btn ghost" id="lob-live" type="button" hidden>進行中の対戦を観戦</button><button class="btn ghost" id="room-leave" type="button">ルームを出る</button></div>`;
   overlay.hidden=false;
   bindNameField(); bindAiLevel();
   el('room-seats').addEventListener('click',e=>{
@@ -2703,6 +2703,16 @@ function showRoom(){
   });
   el('lob-live').addEventListener('click',()=>{ if(NET.liveG) beginNet('client',NET.liveG,[],-1); });
   el('room-leave').addEventListener('click',()=>{ leaveRoom(); showLobby(); });
+  if(RM.host) el('room-start').addEventListener('click',()=>{
+    // 空いた席は人がいないのでAIになる。結果画面を見ている人がいるときは待つ
+    const {st}=seatsState(), humans=st.filter(x=>x.kind==='human').length, away=st.filter(x=>x.away).length;
+    if(!humans){ roomStatus('だれも席に座っていません。好きな色の席に座ってから押してください。'); return; }
+    if(away){ roomStatus(`${away}人がまだ前の対戦の結果画面を見ています。全員がルームに戻ってから押してください。`); return; }
+    if(RM.blocked && RM.cdAt===0 && RM.starting) return;
+    RM.starting=true; RM.cdAt=0; RM.blocked=true;
+    for(let i=0;i<4;i++) if(st[i].kind==='open') RM.ai[i]=true;
+    roomPresence(); hostStart(st).finally(()=>{ RM.starting=false; });
+  });
   RM.html=''; renderRoom();
 }
 function renderRoom(){
@@ -2721,14 +2731,14 @@ function renderRoom(){
   const open=st.filter(s=>s.kind==='open').length, away=st.filter(s=>s.away).length;
   el('room-lead').textContent = RM.host
     ? (P2P ? `あなたがホストです。ルームコード「${RM.code}」を一緒に遊ぶ人に伝えてください。` : `あなたがホストです。ほかの人はロビーの一覧からこのルームに参加できます。`)
-      + `空いた席は「AIにする」でAIに任せられます。対戦中のゲームはあなたの画面で動くので、終わるまでこのタブを開いたままにしてください。`
+      + `「スタート」を押すと、空いている席はAIになってすぐ始まります（全部の席が埋まったときは自動でも始まります）。空いた席は「AIにする」でAIに任せられます。対戦中のゲームはあなたの画面で動くので、終わるまでこのタブを開いたままにしてください。`
     : `ホスト：${hostP ? (cleanName(hostP.presence.name)||'名前なし') : '（いません）'}。好きな色の席に座ってください。`;
   el('room-lead').textContent += '同じ色に座った人どうしがチームになり、それぞれが自分の元祖細胞を操作します。'+(RM.host?'人が座っている色には「＋AIの仲間」で、自分で動くAIを仲間に足せます（たとえば3人なら2人 対 1人＋AI）。':'');
   if(!hostP && !RM.host) roomStatus('ホストがルームにいません。ルームを出て、作り直してください。');
   else if(cd!=null) roomStatus(`全員そろいました。開始まで ${cd} 秒`);
   else if(RM.blocked && RM.host) roomStatus(RM.blockMsg||'開始できませんでした。');
   else if(away && !open) roomStatus(`${away}人がまだ前の対戦の結果画面を見ています。全員がルームに戻ると始まります。`);
-  else roomStatus(open ? `あと${open}席。すべての席が人かAIで埋まると、3秒後に始まります。` : '人が1人以上座ると始まります。');
+  else roomStatus(open ? (RM.host ? `あと${open}席。「スタート」ですぐ始められます（空いた席はAI）。全部埋まると3秒後に自動で始まります。` : `あと${open}席。ホストが「スタート」を押すと始まります（空いた席はAI）。`) : '人が1人以上座ると始まります。');
   el('lob-live').hidden=!(NET.liveG && performance.now()-NET.liveAt<3000);
 }
 // ホスト：席がそろったら3秒数えて開始。途中で崩れたら数え直す
