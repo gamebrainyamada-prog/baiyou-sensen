@@ -126,6 +126,7 @@ body{background:var(--bg);color:var(--ink);font-family:var(--f-body);-webkit-use
 .room-row{display:flex;align-items:center;justify-content:space-between;gap:12px;border:1px solid var(--panel-line);border-radius:8px;padding:10px 12px;min-width:0}
 .room-row span{display:grid;gap:2px;min-width:0}
 .room-row small{color:var(--dim);font-family:var(--f-data);font-size:11px}
+.lob-list{max-height:min(60vh,520px);overflow-y:auto;align-content:start}
 .seat-card{display:grid;gap:6px;align-content:start;border:1px solid var(--panel-line);border-radius:8px;padding:10px 12px;min-width:0}
 .seat-card b{display:flex;align-items:center;gap:8px;font-size:14px}
 .seat-card i{width:10px;height:10px;border-radius:50%;flex:none}
@@ -306,7 +307,7 @@ const MIN_SPLIT = 36, P_MAX = 9, DNA_N = 130, CAP = Infinity, FOOD_N = 2800, MAT
 const FOOD_START = 880, FOOD_RAMP = 200;
 const MATCH_LABEL = `${MATCH_TIME/60}分`;
 // バージョン：BUILD は単体版を作るとき（build-standalone.js）に作成日時で置き換わる
-const APP_VERSION='2.6', BUILD='2026/10/29 16:48';
+const APP_VERSION='2.8', BUILD='2026/10/29 17:16';
 const versionLabel = () => `Ver ${APP_VERSION}`+(BUILD.startsWith('__')?'':`（${BUILD} 更新）`);
 const SPEED = 150;
 // プラスミドが容量いっぱいのときの養分の吸収率（次の容量へ育つ速さ）
@@ -357,9 +358,20 @@ function aiMix(f){
 // 見直し：rbSkip 見直しを飛ばす確率・rbMin 切り替える足りなさの境目
 // 元祖細胞：spikeFire トゲを撃つ確率・spikeRange 撃つ距離・spikeFlee 逃げ始める距離・plR プラスミドを拾いに行く距離・homeBaseR/homeBaseP 自分の拠点へ寄る距離と確率
 // 増殖：growBaseR 元祖細胞からこの距離に自分の拠点があればその周りで育つ
+// ---- ここから戦術（目の前の戦い）の数値 ----
+// 共通：thinkK 考え直す間隔の倍率（小さいほど反応が速い）
+// 狙い：点数＝-距離/300 ＋ tgtConv×乗っ取りやすさ ＋ tgtFocus×味方が撃っている相手 − tgtBig×相手の大きさの比 ＋ tgtLeader×元祖細胞
+// 攻撃モード：atkFireR 撃つ距離・atkKeep これより遠ければ寄る・atkBack 近すぎるとき下がる強さ・atkSide 横に回り込む強さ・
+//             atkResume 弾がこの数（容量まで）たまったら戦いに戻る・atkFleeR 撃ち切ったときに逃げる敵の距離
+// 増殖モード：growSeeR 敵に気づく距離・growFleeR 逃げる距離
+// 防御モード：defKeep 手元に残す自分の色・defRange 撃つ距離・defLeash 付き添う味方から離れない距離・
+//             治す相手の点＝defForeignW×外来の数 ＋ defFreeW×空き枠 − 距離/defDistW ＋ defHurtW×いま撃たれている
+// 元祖細胞：ldFireR 撃つ距離・ldFireK 撃つ確率（×性格）・ldFleeR 下がる距離・ldCrowd 囲まれたと見なす敵の数・ldFleeK 下がる確率の倍率・
+//           ldChaseR これより遠い敵に寄る・ldChaseK 寄る確率（×性格）・ldMinOwn 寄るのに要る自分の色の数
+// 危険：dangerR 危ないと見なす敵の距離・dangerBig 相手がこの倍より大きいと危ない・spikeFleeC 子細胞がトゲから逃げる距離
 const AIP_DEF=/*AIP-BEGIN*/{
-  "strong":{"every":5.8244,"extra":4,"wait":0.6044,"defend":0.7966,"keep":1,"targets":1,"bigVal":4,"defW":1.8534,"takeW":1.1296,"distDef":2475.6642,"distTake":870.2121,"enemyW":0.0339,"hold":25.361,"growLow":0.6018,"growN":3,"atkBase":0.1165,"defFx":0.0647,"fxRatio":0.0427,"rbSkip":0.2675,"rbMin":1.5685,"spikeFire":0.5009,"spikeRange":432.7101,"spikeFlee":350.2494,"plR":736.559,"homeBaseR":2027.778,"homeBaseP":0,"growBaseR":24.3345},
-  "normal":{"every":5,"extra":1,"wait":0,"defend":0.5,"keep":1,"targets":1,"bigVal":1.4,"defW":3,"takeW":1.6,"distDef":1500,"distTake":1200,"enemyW":0.25,"hold":45,"growLow":0.35,"growN":6,"atkBase":0.18,"defFx":0.2,"fxRatio":0.12,"rbSkip":0.5,"rbMin":1.5,"spikeFire":0.55,"spikeRange":460,"spikeFlee":320,"plR":450,"homeBaseR":1400,"homeBaseP":0.35,"growBaseR":900}
+  "strong":{"every":5.8244,"extra":4,"wait":0.6044,"defend":0.7966,"keep":1,"targets":1,"bigVal":4,"defW":1.8534,"takeW":1.1296,"distDef":2475.6642,"distTake":870.2121,"enemyW":0.0339,"hold":25.361,"growLow":0.6018,"growN":3,"atkBase":0.1165,"defFx":0.0647,"fxRatio":0.0427,"rbSkip":0.2675,"rbMin":1.5685,"spikeFire":0.5009,"spikeRange":432.7101,"spikeFlee":350.2494,"plR":736.559,"homeBaseR":2027.778,"homeBaseP":0,"growBaseR":24.3345,"thinkK":1,"tgtConv":0,"tgtFocus":0,"tgtBig":0,"tgtLeader":0,"atkFireR":360,"atkKeep":260,"atkBack":0.6,"atkSide":0.35,"atkResume":4,"atkFleeR":500,"growSeeR":260,"growFleeR":200,"defKeep":3,"defRange":320,"defLeash":600,"defForeignW":3,"defFreeW":0.5,"defDistW":250,"defHurtW":0,"ldFireR":380,"ldFireK":0.15,"ldFleeR":200,"ldCrowd":3,"ldFleeK":0.5,"ldChaseR":260,"ldChaseK":0.5,"ldMinOwn":3,"dangerR":320,"dangerBig":1.3,"spikeFleeC":260},
+  "normal":{"every":5,"extra":1,"wait":0,"defend":0.5,"keep":1,"targets":1,"bigVal":1.4,"defW":3,"takeW":1.6,"distDef":1500,"distTake":1200,"enemyW":0.25,"hold":45,"growLow":0.35,"growN":6,"atkBase":0.18,"defFx":0.2,"fxRatio":0.12,"rbSkip":0.5,"rbMin":1.5,"spikeFire":0.55,"spikeRange":460,"spikeFlee":320,"plR":450,"homeBaseR":1400,"homeBaseP":0.35,"growBaseR":900,"thinkK":1,"tgtConv":0,"tgtFocus":0,"tgtBig":0,"tgtLeader":0,"atkFireR":360,"atkKeep":260,"atkBack":0.6,"atkSide":0.35,"atkResume":4,"atkFleeR":500,"growSeeR":260,"growFleeR":200,"defKeep":3,"defRange":320,"defLeash":600,"defForeignW":3,"defFreeW":0.5,"defDistW":250,"defHurtW":0,"ldFireR":380,"ldFireK":0.15,"ldFleeR":200,"ldCrowd":3,"ldFleeK":0.5,"ldChaseR":260,"ldChaseK":0.5,"ldMinOwn":3,"dangerR":320,"dangerBig":1.3,"spikeFleeC":260}
 }/*AIP-END*/;
 const aip = f => (typeof __AIP_OVR!=='undefined' && __AIP_OVR && __AIP_OVR[f]) || (human(f) ? AIP_DEF.strong : AIP_DEF[levelOf(f)]) || AIP_DEF.normal;
 function aiBaseTick(dt){
@@ -494,7 +506,7 @@ function newGame(demo, watch=false, opts={}){
   MP = demo ? -1 : (opts.mp ?? 0); ME = MP>=0 && PL[MP] ? PL[MP].f : -1;
   refreshTeams();
   INP=PL.map(blankInput); SEEN=PL.map(()=>({fi:0,sw:0,od:0})); SEL.clear(); ORDL.clear(); ordN=0; marks=[]; camZ=.6; CAMF=true;
-  S = {t:0, time:MATCH_TIME, over:false, demo, watch, net:opts.net||null, nameNo:[0,0,0,0], follow:-1, speed:1, nextZone:18, sanct:null, nextSanct:45, sanctId:0, spikes:[], spikeId:0, nextSpikeAt:SPIKE_AT, bases:makeBases(), swCd:PL.map(()=>0), pleaders:PL.map(()=>null), pmass:PL.map(()=>0), eaten:0, peak:0, splits:0, dnaGot:0, converted:0, hijacked:0,
+  S = {t:0, time:MATCH_TIME, over:false, demo, watch, net:opts.net||null, nameNo:[0,0,0,0], follow:-1, speed:1, nextZone:18, sanct:null, nextSanct:45, sanctId:0, spikes:[], spikeId:0, nextSpikeAt:SPIKE_AT, bases:makeBases(), swCd:PL.map(()=>0), pleaders:PL.map(()=>null), pmass:PL.map(()=>0), cvS:[0,0,0,0], cvL:[0,0,0,0], eaten:0, peak:0, splits:0, dnaGot:0, converted:0, hijacked:0,
        cam:{x:0,y:0,z:demo?0.32:0.9}, mass:[0,0,0,0], out:[false,false,false,false], leaders:[null,null,null,null]};
   for(let i=0;i<FOOD_N;i++){
     const [x,y]=randInDish(20), late=i>=FOOD_START;
@@ -573,7 +585,7 @@ function checkConvert(c){
   const cnt=[0,0,0,0]; for(const q of c.pl) cnt[q]++;
   let best=c.f; for(let g=0;g<cnt.length;g++) if(cnt[g]>cnt[best]) best=g;
   if(best===c.f) return;
-  const from=c.f; c.f=best; counts[from]--; counts[best]++; c.leader=false; c.ord=null; c.pid=human(best)?nearestPid(best,c):-1; c.mode=modeOf(c); c.no=++S.nameNo[best]; c.ally=null;
+  const from=c.f; c.f=best; counts[from]--; counts[best]++; S.cvS[best]++; S.cvL[from]++; c.leader=false; c.ord=null; c.pid=human(best)?nearestPid(best,c):-1; c.mode=modeOf(c); c.no=++S.nameNo[best]; c.ally=null;
   c.pop=Math.min(c.pop,.5); c.think=0; c.wx=null;
   burst(c.x,c.y,FACTIONS[best].color,8,90);
   if(!S.demo){
@@ -625,7 +637,8 @@ function setDir(c,dx,dy){ const l=Math.hypot(dx,dy)||1; c.dx=dx/l; c.dy=dy/l; }
 
 function steerAI(c,dt){
   c.think-=dt; if(c.think>0) return;
-  c.think=rand(.18,.36);
+  const P=aip(c.f);
+  c.think=rand(.18,.36)*P.thinkK;
   const f=FACTIONS[c.f];
   // 強いAI：元祖細胞が大きくなったら自分で分裂して子を出す（以前のAIの動き）
   if(aiStrong(c) && c.leader && c.mass>=70 && c.splitCd<=0 && Math.random()<.2){ const a=Math.random()*TAU; divide(c,Math.cos(a),Math.sin(a),420); }
@@ -635,22 +648,18 @@ function steerAI(c,dt){
     const d=Math.hypot(c.x-z.x,c.y-z.y);
     if(d<z.r+c.r+90){ setDir(c,c.x-z.x+rand(-20,20),c.y-z.y+rand(-20,20)); return; }
   }
-  let near=null,nd=1e9,crowd=0;
-  query(cellGrid,c.x,c.y,420,o=>{
-    if(o.dead||o.f===c.f||blocked(c,o.x,o.y)) return;
-    const d=Math.hypot(o.x-c.x,o.y-c.y);
-    if(d<nd){nd=d;near=o;}
-    if(d<220) crowd++;
-  });
+  // near／nd＝一番近い敵（下がる判断）、foe／fd＝狙う敵（点数で選ぶ。重みが0なら一番近い敵）
+  const T=pickFoe(c,420,P,false), near=T.nearest, nd=T.nd, foe=T.foe, fd=T.fd;
+  let crowd=0; query(cellGrid,c.x,c.y,220,o=>{ if(!o.dead && o.f!==c.f && !blocked(c,o.x,o.y) && Math.hypot(o.x-c.x,o.y-c.y)<220) crowd++; });
   const own=ownCount(c);
   const sg=sanctGoal(c, inDanger(c,near,nd));
   if(sg){ setDir(c,sg.x-c.x,sg.y-c.y); return; }
   // 撃っても自分の色が多数派のままなら撃つ
-  if(near && nd<380 && c.fireCd<=0 && own>=2 && own-1>c.pl.length-own && Math.random()<f.aggr*.15) fire(c,near.x-c.x,near.y-c.y);
+  if(foe && fd<P.ldFireR && c.fireCd<=0 && own>=2 && own-1>c.pl.length-own && Math.random()<f.aggr*P.ldFireK) fire(c,foe.x-c.x,foe.y-c.y);
   // 弾が少ない・敵に囲まれているときは距離を取る
-  if(near && nd<200 && (own<2 || crowd>=3) && Math.random()>f.aggr*.5){ setDir(c,c.x-near.x,c.y-near.y); return; }
+  if(near && nd<P.ldFleeR && (own<2 || crowd>=P.ldCrowd) && Math.random()>f.aggr*P.ldFleeK){ setDir(c,c.x-near.x,c.y-near.y); return; }
   // 攻撃的な株は弾があれば敵に寄っていく
-  if(near && own>=3 && nd>260 && Math.random()<f.aggr*.5){ setDir(c,near.x-c.x,near.y-c.y); return; }
+  if(foe && own>=P.ldMinOwn && fd>P.ldChaseR && Math.random()<f.aggr*P.ldChaseK){ setDir(c,foe.x-c.x,foe.y-c.y); return; }
   // 空き枠があれば、近くの取り込めるプラスミド（白か自分の色）を拾って分裂の元にする。
   // 見当たらなければ、自分の色のプラスミドが湧く自分の拠点へときどき寄る。それ以外は養分を食べて育つ
   if(c.pl.length<holdCap(c)){
@@ -751,9 +760,10 @@ function sanctTick(dt){
 }
 // AIの「危ない」：近くに敵がいて、弾（自分の色）が少ない・外来プラスミドが入っている・相手のほうが大きい
 function inDanger(c,near,nd){
-  if(!near || nd>320) return false;
+  const P=aip(c.f);
+  if(!near || nd>P.dangerR) return false;
   const own=ownCount(c);
-  return own<3 || c.pl.length-own>0 || near.mass>c.mass*1.3;
+  return own<3 || c.pl.length-own>0 || near.mass>c.mass*P.dangerBig;
 }
 // AIの保護区の使い方：自分のために出た未確保の保護区は取りに行く。危ないときは、未確保か自分の色の保護区へ逃げ込み、
 // 中にいるなら危険が去るまで留まる。他の色の保護区には入れないので目指さない（消える直前も目指さない）
@@ -828,7 +838,7 @@ function damageSpike(k,by,x,y){
 function spikeFlee(c){
   let k=null, kd=1e9;
   for(const o of S.spikes){ const d=Math.hypot(c.x-o.x,c.y-o.y); if(d<kd){ kd=d; k=o; } }
-  if(!k || kd>k.r+c.r+260) return false;
+  if(!k || kd>k.r+c.r+aip(c.f).spikeFleeC) return false;
   const dx=c.x-k.x, dy=c.y-k.y;
   setDir(c,dx-dy*.3,dy+dx*.3); return true;
 }
@@ -849,34 +859,51 @@ function drawSpike(k,z){
     if(i<k.hp){ ctx.fillStyle=C.spike; ctx.fill(); } else { ctx.lineWidth=Math.max(1/z,1.2); ctx.strokeStyle=C.spike; ctx.stroke(); }
   }
 }
+// ---------- 狙う敵の選び方 ----------
+// 視界の中の敵を点数で比べる。全部の重みが0なら一番近い敵（今までと同じ）。nearest／nd は一番近い敵（逃げる判断に使う）
+// cut＝視界の外（vr より遠い敵）を除く。元祖細胞は今までどおり除かない
+function pickFoe(c,vr,P,cut=true){
+  let foe=null, bs=-1e18, nearest=null, nd=1e9;
+  const plain=!P.tgtConv && !P.tgtFocus && !P.tgtBig && !P.tgtLeader;
+  query(cellGrid,c.x,c.y,vr,o=>{
+    if(o.dead||o.f===c.f||blocked(c,o.x,o.y)) return;
+    const d=Math.hypot(o.x-c.x,o.y-c.y); if(cut && d>=vr) return;
+    if(d<nd){ nd=d; nearest=o; }
+    if(plain) return;
+    let mine=0; for(const q of o.pl) if(q===c.f) mine++;
+    const conv=(mine+1)/(ownCount(o)+1), focus=o.hitT && S.t-o.hitT[c.f]<3 ? 1 : 0;
+    const sc=-d/300 + P.tgtConv*conv + P.tgtFocus*focus - P.tgtBig*Math.min(3,o.mass/(c.mass||1)) + (o.leader?P.tgtLeader:0);
+    if(sc>bs){ bs=sc; foe=o; }
+  });
+  if(plain) foe=nearest;
+  return {foe, fd:foe?Math.hypot(foe.x-c.x,foe.y-c.y):1e9, nearest, nd};
+}
 // ---------- モード別行動 ----------
 // 攻撃：近くの敵を探し、撃てる距離を保って撃つ。撃ち切ったら敵から逃げ、プラスミドが4個たまるまで補給する。分裂はしない
 function steerAttack(c,dt){
   c.think-=dt; if(c.think>0) return;
-  c.think=rand(.15,.3);
+  const P=aip(c.f);
+  c.think=rand(.15,.3)*P.thinkK;
   // AIも自分の視界（霧と同じ半径）の中しか見ない
-  let near=null,nd=1e9; const vr=aiStrong(c) ? Math.max(700,visR(c)) : visR(c);
-  query(cellGrid,c.x,c.y,vr,o=>{
-    if(o.dead||o.f===c.f||blocked(c,o.x,o.y)) return;
-    const d=Math.hypot(o.x-c.x,o.y-c.y); if(d<vr && d<nd){nd=d;near=o;}
-  });
+  const vr=aiStrong(c) ? Math.max(700,visR(c)) : visR(c);
+  const T=pickFoe(c,vr,P), near=T.foe, nd=T.fd, close=T.nearest, cd=T.nd;
   const own=ownCount(c), canShoot=own>=2 && own-1>c.pl.length-own, A=anchorOf(c);
   if(!canShoot) c.retreat=true;
-  else if(own>=Math.min(4,holdCap(c))) c.retreat=false;
+  else if(own>=Math.min(P.atkResume,holdCap(c))) c.retreat=false;
   if(c.retreat){
     // 撃ち切って危ないときは、入れる保護区があれば逃げ込む
-    const sg=sanctGoal(c, near && nd<500);
+    const sg=sanctGoal(c, close && cd<P.atkFleeR);
     if(sg){ setDir(c,sg.x-c.x,sg.y-c.y); return; }
     // 拠点を任されているときは、弾がなくても逃げずに居座る（拠点は中にいる数で取り合う）
-    if(near && nd<500 && !(A && A.ai)){ setDir(c,c.x-near.x,c.y-near.y); return; }
+    if(close && cd<P.atkFleeR && !(A && A.ai)){ setDir(c,c.x-close.x,c.y-close.y); return; }
     if(A) seekFood(c,A,leashOf(A,'atk')); else seekFood(c); return;
   }
   // 旗があれば、その範囲から離れすぎたら戻る
   if(A && Math.hypot(A.x-c.x,A.y-c.y)>leashOf(A,'atk')){ setDir(c,A.x-c.x,A.y-c.y); return; }
   if(near){
-    if(nd<360 && c.fireCd<=0) fire(c,near.x-c.x,near.y-c.y);
-    const dx=near.x-c.x, dy=near.y-c.y, k=nd>260?1:-.6;
-    setDir(c,dx*k-dy*.35,dy*k+dx*.35); return;
+    if(nd<P.atkFireR && c.fireCd<=0) fire(c,near.x-c.x,near.y-c.y);
+    const dx=near.x-c.x, dy=near.y-c.y, k=nd>P.atkKeep?1:-P.atkBack;
+    setDir(c,dx*k-dy*P.atkSide,dy*k+dx*P.atkSide); return;
   }
   if(A){ seekFood(c,A,leashOf(A,'atk')*.6); return; }
   // 旗がないときは、自分のものでない拠点を取りに行く
@@ -889,30 +916,32 @@ function steerAttack(c,dt){
 const GROW_R=DISH_R/2;
 function steerGrow(c,dt){
   c.think-=dt; if(c.think>0) return;
-  c.think=rand(.2,.35);
+  const P=aip(c.f);
+  c.think=rand(.2,.35)*P.thinkK;
   const A=anchorOf(c); let L=A||ownerLeader(c), LR=A?leashOf(A,'grow'):GROW_R;
   // AIの増殖は、元祖細胞の近くに自分の拠点があればその周りで育つ（自分の色のプラスミドが湧き、数で居座れる）
   if(!A && L && !human(c.f)){ const hb=nearestBase(L,b=>b.owner===c.f,aip(c.f).growBaseR); if(hb){ L=hb; LR=Math.max(hb.r*1.6,480); } }
   let near=null,nd=1e9;
-  query(cellGrid,c.x,c.y,260,o=>{
+  query(cellGrid,c.x,c.y,P.growSeeR,o=>{
     if(o.dead||o.f===c.f) return;
     const d=Math.hypot(o.x-c.x,o.y-c.y); if(d<nd){nd=d;near=o;}
   });
   const sg=sanctGoal(c, inDanger(c,near,nd));
   if(sg){ setDir(c,sg.x-c.x,sg.y-c.y); return; }
-  if(near && nd<200){ setDir(c,c.x-near.x,c.y-near.y); return; }
+  if(near && nd<P.growFleeR){ setDir(c,c.x-near.x,c.y-near.y); return; }
   // 範囲の外に出ていたら元祖細胞（旗があれば旗の範囲）のほうへ戻る
   if(L && Math.hypot(L.x-c.x,L.y-c.y)>LR){ setDir(c,L.x-c.x,L.y-c.y); return; }
   seekFood(c,L,LR);
 }
-// 防御：防御モード以外の味方（元祖細胞・攻撃・増殖）を探して守る。自分の色は DEF_KEEP 個まで手元に残し、
+// 防御：防御モード以外の味方（元祖細胞・攻撃・増殖）を探して守る。自分の色は defKeep 個まで手元に残し、
 // 余りだけを、外来プラスミドが入った味方や空き枠のある味方に撃ち込む（当たると治す・補充する）。
 // 余りがなければ漂うプラスミドを集めに行き、撃つ相手がいなければ一番近い味方に付き添って補給する
-const DEF_KEEP=3, DEF_RANGE=320, DEF_LEASH=600;
+// 手元に残す数・撃つ距離・離れない距離は AIP の defKeep・defRange・defLeash
 function steerDefend(c,dt,L){
+  const P=aip(c.f);
   c.think-=dt;
   if(c.think<=0){
-    c.think=rand(.25,.4);
+    c.think=rand(.25,.4)*P.thinkK;
     let best=null,bs=-1e9,guard=null,gd=1e9;
     query(cellGrid,c.x,c.y,700,o=>{
       if(o===c||o.dead||o.f!==c.f||(o.mode==='def'&&!o.leader)) return;
@@ -920,7 +949,9 @@ function steerDefend(c,dt,L){
       if(d<gd){gd=d;guard=o;}
       const foreign=o.pl.length-ownCount(o), free=holdCap(o)-o.pl.length;
       if(foreign<=0 && free<=0) return;
-      const s=foreign*3+free*.5-d/250;
+      // いま敵に撃たれている味方（3秒以内に当てられた）を優先できる
+      const hurt=o.hitT && o.hitT.some((t,g)=>g!==c.f && S.t-t<3) ? 1 : 0;
+      const s=foreign*P.defForeignW+free*P.defFreeW-d/P.defDistW+hurt*P.defHurtW;
       if(s>bs){bs=s;best=o;}
     });
     c.ally=best; c.guard=guard||L;
@@ -928,12 +959,12 @@ function steerDefend(c,dt,L){
   // 旗があれば、その範囲から離れすぎたら戻る（範囲の中で味方を守る）
   const A=anchorOf(c);
   if(A && Math.hypot(A.x-c.x,A.y-c.y)>leashOf(A,'def')){ setDir(c,A.x-c.x,A.y-c.y); return; }
-  // 余り（DEF_KEEP 個を超えた分）があり、撃っても自分が乗っ取られないときだけ撃てる
-  const canGive=ownCount(c)>DEF_KEEP && canFire(c);
+  // 余り（defKeep 個を超えた分）があり、撃っても自分が乗っ取られないときだけ撃てる
+  const canGive=ownCount(c)>Math.round(P.defKeep) && canFire(c);
   const a=c.ally;
   if(a && !a.dead && a.f===c.f && canGive){
     const d=Math.hypot(a.x-c.x,a.y-c.y);
-    if(d<DEF_RANGE+a.r){
+    if(d<P.defRange+a.r){
       if(c.fireCd<=0) fire(c,a.x-c.x,a.y-c.y);
       // 撃てる距離を保ち、近づきすぎたら少し離れる
       const k=d<a.r+c.r+60 ? -.5 : .15;
@@ -944,11 +975,11 @@ function steerDefend(c,dt,L){
   // 余りがないときは、視界の中の漂うプラスミド（白か自分の色）を取りに行く。見当たらなければ養分を食べながら探し回る
   const g=A || (c.guard && !c.guard.dead && c.guard.f===c.f ? c.guard : L);
   if(!canGive){
-    // 付き添う味方から DEF_LEASH 以上は離れない
-    if(g && Math.hypot(g.x-c.x,g.y-c.y)>DEF_LEASH){ setDir(c,g.x-c.x,g.y-c.y); return; }
-    const dn=nearestPlasmid(c,g,DEF_LEASH);
+    // 付き添う味方から defLeash 以上は離れない
+    if(g && Math.hypot(g.x-c.x,g.y-c.y)>P.defLeash){ setDir(c,g.x-c.x,g.y-c.y); return; }
+    const dn=nearestPlasmid(c,g,P.defLeash);
     if(dn){ setDir(c,dn.x-c.x,dn.y-c.y); return; }
-    seekFood(c,g,DEF_LEASH); return;
+    seekFood(c,g,P.defLeash); return;
   }
   if(g && Math.hypot(g.x-c.x,g.y-c.y)>g.r+c.r+120){ setDir(c,g.x-c.x,g.y-c.y); return; }
   seekFood(c,g);
@@ -1134,6 +1165,7 @@ function update(dt){
         if(o.pl.length<capOf(o.mass)) o.pl.push(s.f);
         else { const i=o.pl.indexOf(o.f); if(i>=0) o.pl[i]=s.f; }
         s.life=-1; s.hit=true; o.pop=Math.min(o.pop,.85);
+        if(!o.hitT) o.hitT=[-99,-99,-99,-99]; o.hitT[s.f]=S.t;
         burst(s.x,s.y,FACTIONS[s.f].color,3,40);
         checkConvert(o);
       }
@@ -2300,7 +2332,7 @@ function continueSpectate(){
 let room=null;
 const NET={g:null, seats:{}, inLobby:false, lastRecv:0, snapAt:0, snapSeq:0, foodSeq:0, lastSnap:0, lastFood:0,
            buf:null, fbuf:null, applied:0, fapplied:0, liveG:null, liveAt:0};
-const LOB={name:'', seat:0};
+const LOB={name:'', seat:0, lock:false};
 try{ LOB.name=cleanName(localStorage.getItem('baiyou-name')); }catch(e){}
 const SNAP_MS=160, FOOD_MS=1500, CHUNK=3300, MODES=['atk','def','grow'];
 // 数値を62進の固定幅文字列に詰める（1回の送信は4KiBまでなので、細胞1個を十数文字に収める）
@@ -2518,7 +2550,8 @@ const RM={code:null, R:null, host:false, ai:[false,false,false,false], seat:-1, 
 const roomStatus = t => { const s=el('lob-status'); if(s) s.textContent=t; };
 function lobbyPresence(){
   if(!room) return;
-  const adv = RM.host && RM.code ? {code:RM.code, host:LOB.name||'ホスト', n:RM.lastN<0?1:RM.lastN} : null;
+  const adv = RM.host && RM.code ? {code:RM.lock?'':RM.code, lock:RM.lock?1:0, play:NET.inRoom?0:1, host:LOB.name||'ホスト', n:RM.lastN<0?1:RM.lastN} : null;
+  if(P2P) DIR.setAd(adv);
   room.presence({lob: NET.inLobby||NET.inRoom ? {name:LOB.name} : null, adv}).catch(()=>{});
 }
 function nameField(){
@@ -2538,63 +2571,72 @@ function bindNameField(){
 function showLobby(){
   NET.inLobby=true; NET.inRoom=false; NET.lobbyHtml='';
   setWatchUI(false);
-  card.className='card'; card.innerHTML=`
-    <div class="eyebrow">オンライン対戦</div>
-    <h1>ロビー</h1>
-    <p class="lead">${P2P
-      ? '名前を入れて、ルームを作るか、教えてもらったルームコードで参加してください。ルームの4つの席（陣営）が人かAIで埋まると、自動で対戦が始まります。'
-      : '名前を入れて、ルームを作るか、開いているルームに参加してください。ルームの4つの席（陣営）が人かAIで埋まると、自動で対戦が始まります。'}</p>
-    ${nameField()}
-    <div class="btns"><button class="btn" id="lob-create" type="button">ルームを作る</button><button class="btn ghost" id="lob-back" type="button">戻る</button></div>
-    ${P2P
-      ? `<div class="field"><label for="lob-code">ルームコードで参加</label><div class="code-row"><input id="lob-code" maxlength="6" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="例：k3v6q"><button class="btn small" id="lob-join" type="button">参加</button></div></div>`
-      : `<div class="hud-title">開いているルーム</div>`}
-    <div class="rooms" id="lob-rooms"></div>
-    <p class="note" id="lob-status"></p>`;
+  card.className='card title'; card.innerHTML=`
+    <div class="col">
+      <div class="eyebrow">オンライン対戦</div>
+      <h1>ロビー</h1>
+      <p class="lead">名前を入れて、ルームを作るか、右の一覧から参加してください。鍵付きのルームは、教えてもらったコードを下に打って入ります。4つの席（色）が人かAIで埋まると、自動で対戦が始まります。</p>
+      ${nameField()}
+      <div class="field"><span class="hud-title">作るルームの鍵</span><div class="seg ai-seg" id="lob-lock"><button type="button" data-lock="0" aria-pressed="${!LOB.lock}">鍵なし（だれでも入れる）</button><button type="button" data-lock="1" aria-pressed="${!!LOB.lock}">鍵あり（コードを知っている人だけ）</button></div></div>
+      <div class="btns"><button class="btn" id="lob-create" type="button">ルームを作る</button><button class="btn ghost" id="lob-back" type="button">戻る</button></div>
+      <div class="field"><label for="lob-code">コードで参加（鍵付きのルームはここから）</label><div class="code-row"><input id="lob-code" maxlength="6" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="例：${P2P?'k3v6q':'k3v6'}"><button class="btn small" id="lob-join" type="button">参加</button></div></div>
+      <p class="note" id="lob-status"></p>
+    </div>
+    <div class="col howto">
+      <div class="hud-title">開いているルーム</div>
+      <div class="rooms lob-list" id="lob-rooms"></div>
+    </div>`;
   overlay.hidden=false;
   const inp=bindNameField();
   const newCode=()=>Math.random().toString(36).slice(2,2+(P2P?5:4)).padEnd(P2P?5:4,'0');
-  el('lob-create').addEventListener('click',()=>enterRoom(newCode(),true));
+  el('lob-lock').addEventListener('click',e=>{ const b=e.target.closest('button[data-lock]'); if(!b) return; LOB.lock=b.dataset.lock==='1'; pressOnly(el('lob-lock'),'lock',LOB.lock?'1':'0'); });
+  el('lob-create').addEventListener('click',()=>enterRoom(newCode(),true,LOB.lock));
   el('lob-back').addEventListener('click',()=>{ leaveLobby(); showTitle(); });
-  el('lob-rooms').addEventListener('click',e=>{ const b=e.target.closest('button[data-code]'); if(b) enterRoom(b.dataset.code,false); });
-  if(P2P){
-    const ci=el('lob-code');
-    const go=()=>{ const v=String(ci.value||'').trim().toLowerCase(); if(/^[a-z0-9]{4,6}$/.test(v)) enterRoom(v,false); else roomStatus('ルームコードは英数字4〜6文字です。'); };
-    el('lob-join').addEventListener('click',go);
-    ci.addEventListener('keydown',e=>{ if(e.key==='Enter') go(); });
-  }
+  const ci=el('lob-code');
+  el('lob-rooms').addEventListener('click',e=>{
+    const b=e.target.closest('button[data-code]'); if(b){ enterRoom(b.dataset.code,false); return; }
+    // 鍵付き：コードの欄へ
+    if(e.target.closest('button[data-lock]')){ ci.focus(); roomStatus('鍵付きのルームです。ホストに教えてもらったコードを入れて「参加」を押してください。'); }
+  });
+  const go=()=>{ const v=String(ci.value||'').trim().toLowerCase(); if(/^[a-z0-9]{4,6}$/.test(v)) enterRoom(v,false); else roomStatus('ルームコードは英数字4〜6文字です。'); };
+  el('lob-join').addEventListener('click',go);
+  ci.addEventListener('keydown',e=>{ if(e.key==='Enter') go(); });
+  if(P2P) startDir();
   lobbyPresence(); renderLobby();
   inp.focus();
+}
+// 一覧の1行。鍵付きはコードを見せず、コードの欄から入ってもらう
+function roomRow(a){
+  const who=`<span><b>${esc(cleanName(a.host)||'ホスト')}のルーム</b><small>${a.lock?'鍵付き':'コード '+a.code} ・ 人 ${clampN(a.n,0,32)|0}${a.play?' ・ 対戦中':''}</small></span>`;
+  const btn=a.lock ? '<button class="btn small ghost" type="button" data-lock="1">鍵 コードを入力</button>' : `<button class="btn small" type="button" data-code="${a.code}">参加</button>`;
+  return `<div class="room-row">${who}${btn}</div>`;
 }
 function renderLobby(){
   if(NET.inRoom) return renderRoom();
   if(!NET.inLobby || !el('lob-rooms')) return;
-  if(P2P){
-    roomStatus('ルームを作ると、参加用のコードが出ます。そのコードを一緒に遊ぶ人に伝えてください。');
-    el('lob-create').disabled=false;
-    return;
-  }
-  const peers=room ? room.peers() : [];
-  const ads=peers.map(p=>p.presence && p.presence.adv).filter(a=>a && /^[a-z0-9]{4}$/.test(a.code));
-  const html = ads.length
-    ? ads.map(a=>`<div class="room-row"><span><b>${esc(cleanName(a.host)||'ホスト')}のルーム</b><small>コード ${a.code} ・ 人 ${clampN(a.n,0,4)|0}/4</small></span><button class="btn small" type="button" data-code="${a.code}">参加</button></div>`).join('')
-    : '<p class="note">まだルームがありません。「ルームを作る」で作れます。</p>';
+  const codeOk = c => P2P ? /^[a-z0-9]{5}$/.test(c) : /^[a-z0-9]{4}$/.test(c);
+  let ads;
+  if(P2P) ads=DIR.list;
+  else { const peers=room ? room.peers() : []; ads=peers.map(p=>p.presence && p.presence.adv).filter(Boolean); }
+  ads=ads.filter(a=>a && (a.lock || codeOk(a.code)));
+  const html = ads.length ? ads.map(roomRow).join('') : '<p class="note">まだルームがありません。「ルームを作る」で作れます。</p>';
   if(html!==NET.lobbyHtml){ NET.lobbyHtml=html; el('lob-rooms').innerHTML=html; }
-  if(!room) roomStatus('この画面ではオンライン機能を使えません。claude.ai にサインインした状態で、共有されたリンクから開いてください。');
+  if(P2P) roomStatus(DIR.state==='ok' ? `ロビーにつながっています（開いているルーム ${ads.length}）` : DIR.state==='fail' ? 'ルームの一覧を取れませんでした。コードを知っていれば、そのまま参加できます。' : 'ルームの一覧につないでいます…');
+  else if(!room) roomStatus('この画面ではオンライン機能を使えません。claude.ai にサインインした状態で、共有されたリンクから開いてください。');
   else if(!room.connected()) roomStatus('接続中…');
-  else roomStatus(`いまこのページを開いている人：${peers.length}人`);
+  else roomStatus(`いまこのページを開いている人：${room.peers().length}人`);
   el('lob-create').disabled=!room;
 }
 function leaveLobby(){ leaveRoom(); NET.inLobby=false; lobbyPresence(); }
 
 // ルームに入る（作った人がホスト）
-async function enterRoom(code,host){
+async function enterRoom(code,host,lock=false){
   if(!room) return;
   let R;
   roomStatus(host ? 'ルームを作っています…' : 'ルームに接続しています…');
   try{ R=await room.join('baiyou-'+code, host); }
   catch(e){ roomStatus((P2P && e && e.message ? e.message+'。' : 'ルームに入れませんでした。')+'少し待ってからもう一度試してください。'); return; }
-  Object.assign(RM,{code, R, host, ai:[false,false,false,false], seat:host?0:-1, cdAt:0, blocked:false, lastCd:null, lastN:-1, html:''});
+  Object.assign(RM,{code, R, host, lock:host && !!lock, ai:[false,false,false,false], seat:host?0:-1, cdAt:0, blocked:false, lastCd:null, lastN:-1, html:''});
   NET.inLobby=false; NET.inRoom=true; NET.liveG=null;
   R.on('start',onStart); R.on('snap',onSnap); R.on('food',onFood); R.on('ev',onEv); R.on('end',onEnd);
   R.onPeers(()=>renderRoom());
@@ -2602,7 +2644,7 @@ async function enterRoom(code,host){
 }
 function leaveRoom(){
   if(RM.R) RM.R.leave().catch(()=>{});
-  Object.assign(RM,{code:null, R:null, host:false, seat:-1, cdAt:0, lastN:-1});
+  Object.assign(RM,{code:null, R:null, host:false, lock:false, seat:-1, cdAt:0, lastN:-1});
   NET.inRoom=false;
 }
 function roomPresence(){
@@ -2627,7 +2669,7 @@ function seatsState(){
 }
 function showRoom(){
   card.className='card'; card.innerHTML=`
-    <div class="eyebrow">オンライン対戦 ／ ルーム ${RM.code}</div>
+    <div class="eyebrow">オンライン対戦 ／ ルーム ${RM.code}${RM.lock?' ／ 鍵付き（一覧にコードは出ません。入ってほしい人にコードを伝えてください）':''}</div>
     <h1>${RM.host ? 'あなたのルーム' : 'ルーム'}</h1>
     <p class="lead" id="room-lead"></p>
     ${nameField()}
@@ -2811,6 +2853,60 @@ function makeP2PRoom(){
     },
   };
   return api;
+}
+// ---------- GitHub 版のルーム一覧（受付係） ----------
+// PeerJS には一覧の仕組みがないので、決まった名前（DIR_ID）を最初に取った画面が「受付係」になり、
+// ロビーを開いている全員から「自分のルーム」の情報を集めて一覧を配る。受付係が閉じたら、残った誰かが代わりになる。
+// 鍵付きのルームはコードを送らない（一覧には「鍵付き」とだけ出る）
+const DIR_ID='baiyou-sensen-lobby-v1';
+const DIR={list:[], state:'off', ad:null, peer:null, conn:null, conns:new Map(), ads:new Map(), isDir:false, timer:null,
+  setAd(ad){ this.ad=ad; if(this.isDir){ this.ads.set('self',ad); dirPush(); } else if(this.conn && this.conn.open) this.conn.send({t:'ad',ad}); }};
+const dirClean = a => {
+  if(!a || typeof a!=='object') return null;
+  const lock=!!a.lock, code=String(a.code||'');
+  if(!lock && !/^[a-z0-9]{5}$/.test(code)) return null;
+  return {code:lock?'':code, lock, play:!!a.play, host:cleanName(a.host), n:clampN(a.n,0,32)|0};
+};
+function dirPush(){
+  const arr=[...DIR.ads.values()].map(dirClean).filter(Boolean);
+  for(const c of DIR.conns.values()) if(c.open) c.send({t:'list',list:arr});
+  DIR.list=arr; renderLobby();
+}
+function dirReset(){
+  clearTimeout(DIR.timer);
+  try{ if(DIR.peer) DIR.peer.destroy(); }catch(e){}
+  DIR.peer=null; DIR.conn=null; DIR.conns=new Map(); DIR.ads=new Map(); DIR.isDir=false;
+}
+const dirRetry = fn => { clearTimeout(DIR.timer); DIR.timer=setTimeout(fn,400+Math.random()*1200); };
+function startDir(){ if(DIR.state==='off') dirJoin(); }
+// 受付係につなぐ。いなければ自分がなる
+function dirJoin(){
+  dirReset(); DIR.state='wait'; renderLobby();
+  let p; try{ p=new window.Peer(); }catch(e){ DIR.state='fail'; renderLobby(); return; }
+  DIR.peer=p;
+  p.on('open',()=>{
+    const c=p.connect(DIR_ID,{reliable:true,serialization:'json'}); DIR.conn=c;
+    const to=setTimeout(()=>{ if(!c.open) dirBecome(); },6000);
+    c.on('open',()=>{ clearTimeout(to); DIR.state='ok'; c.send({t:'ad',ad:DIR.ad}); renderLobby(); });
+    c.on('data',m=>{ if(m && m.t==='list' && Array.isArray(m.list)){ DIR.list=m.list.slice(0,60).map(dirClean).filter(Boolean); renderLobby(); } });
+    c.on('close',()=>{ if(DIR.conn===c){ DIR.state='wait'; DIR.list=[]; renderLobby(); dirRetry(dirJoin); } });
+  });
+  p.on('error',e=>{ if(DIR.peer!==p) return; if(e && e.type==='peer-unavailable') dirBecome(); else { DIR.state='fail'; renderLobby(); dirRetry(dirJoin); } });
+}
+function dirBecome(){
+  dirReset(); DIR.isDir=true;
+  let p; try{ p=new window.Peer(DIR_ID); }catch(e){ DIR.state='fail'; renderLobby(); return; }
+  DIR.peer=p;
+  p.on('open',()=>{
+    DIR.state='ok'; if(DIR.ad) DIR.ads.set('self',DIR.ad); dirPush();
+    p.on('connection',c=>{
+      c.on('open',()=>{ DIR.conns.set(c.peer,c); c.send({t:'list',list:[...DIR.ads.values()].map(dirClean).filter(Boolean)}); });
+      c.on('data',m=>{ if(m && m.t==='ad'){ if(m.ad) DIR.ads.set(c.peer,m.ad); else DIR.ads.delete(c.peer); dirPush(); } });
+      c.on('close',()=>{ DIR.conns.delete(c.peer); DIR.ads.delete(c.peer); dirPush(); });
+    });
+  });
+  // 同時に誰かが受付係になったら、そちらにつなぐ
+  p.on('error',e=>{ if(DIR.peer!==p) return; dirRetry(dirJoin); });
 }
 // claude.ai の中では room 機能、外では PeerJS が読み込めていれば WebRTC を使う
 const P2P = !(window.claude && window.claude.use) && typeof window.Peer==='function';
