@@ -197,6 +197,7 @@ h1 .sub{display:block;font-size:.3em;color:var(--dim);letter-spacing:.3em;margin
     <canvas id="cv"></canvas>
     <div id="touch">
       <button id="b-fire" type="button">発射</button>
+      <button id="b-ctl" type="button">操作</button>
       <button id="b-all" type="button">全選択</button>
       <button id="b-map" type="button">マップ</button>
     </div>
@@ -228,6 +229,11 @@ h1 .sub{display:block;font-size:.3em;color:var(--dim);letter-spacing:.3em;margin
       <div class="hud-title" id="w-lv-title">AIの強さ（陣営ごと）</div>
       <div class="lvrows" id="w-lv"></div>
       <button type="button" class="quit" id="w-quit">観戦をやめてタイトルへ</button>
+    </section>
+
+    <section class="sec" id="sec-ctl">
+      <div class="hud-title">操作の方式 <kbd>Tab</kbd></div>
+      <div class="seg" id="ctl-seg"><button type="button" data-c="man">操作（マウスに追従）</button><button type="button" data-c="auto">オート（RTS）</button></div>
     </section>
 
     <section class="sec" id="sec-mode">
@@ -265,7 +271,7 @@ h1 .sub{display:block;font-size:.3em;color:var(--dim);letter-spacing:.3em;margin
     <section class="sec keys" id="sec-keys">
       <div class="hud-title">操作</div>
       <div class="ver" id="ver-label"></div>
-      <div class="keylist"><span>左クリック／ドラッグ</span><span>細胞を選ぶ（<kbd>Shift</kbd>で追加、ダブルクリックで同じモードを全部）</span><span>右クリック</span><span>選んだ細胞へ命令：地面＝移動、敵・トゲ＝攻撃</span><span><kbd>1</kbd><kbd>2</kbd><kbd>3</kbd></span><span>選んだ細胞のモード変更（未選択なら次に生まれる細胞）</span><span><kbd>F</kbd></span><span>元祖細胞がカーソルへ発射</span><span><kbd>Q</kbd> <kbd>H</kbd> <kbd>C</kbd></span><span>全選択／停止（自動に戻す）／選んだ細胞に乗り換え</span><span><kbd>WASD</kbd> ホイール</span><span>カメラ移動・ズーム（画面の端でも動く）、<kbd>Space</kbd>で元祖細胞へ</span><span><kbd>M</kbd></span><span>全体マップ</span></div>
+      <div class="keylist"><span>左クリック／ドラッグ</span><span>細胞を選ぶ（<kbd>Shift</kbd>で追加、ダブルクリックで同じモードを全部）</span><span>右クリック</span><span>選んだ細胞へ命令：地面＝移動、敵・トゲ＝攻撃（オートモードでは未選択なら元祖細胞）</span><span><kbd>1</kbd><kbd>2</kbd><kbd>3</kbd></span><span>選んだ細胞のモード変更（未選択なら次に生まれる細胞）</span><span><kbd>F</kbd></span><span>元祖細胞がカーソルへ発射</span><span><kbd>Q</kbd> <kbd>H</kbd> <kbd>C</kbd></span><span>全選択／停止（自動に戻す）／選んだ細胞に乗り換え</span><span><kbd>Tab</kbd></span><span>操作モード（元祖細胞がマウスに追従）とオートモード（RTS）の切り替え</span><span><kbd>WASD</kbd> ホイール</span><span>オートモードのカメラ移動（画面の端でも）・ズーム、<kbd>Space</kbd>で元祖細胞へ</span><span><kbd>M</kbd></span><span>全体マップ</span></div>
     </section>
 
     <section class="sec" id="sec-quit" hidden>
@@ -300,7 +306,7 @@ const MIN_SPLIT = 36, P_MAX = 9, DNA_N = 130, CAP = Infinity, FOOD_N = 2800, MAT
 const FOOD_START = 880, FOOD_RAMP = 200;
 const MATCH_LABEL = `${MATCH_TIME/60}分`;
 // バージョン：BUILD は単体版を作るとき（build-standalone.js）に作成日時で置き換わる
-const APP_VERSION='2.2', BUILD='2026/10/29 01:03';
+const APP_VERSION='2.3', BUILD='2026/10/29 15:16';
 const versionLabel = () => `Ver ${APP_VERSION}`+(BUILD.startsWith('__')?'':`（${BUILD} 更新）`);
 const SPEED = 150;
 // プラスミドが容量いっぱいのときの養分の吸収率（次の容量へ育つ速さ）
@@ -355,7 +361,7 @@ const AIP_DEF=/*AIP-BEGIN*/{
   "strong":{"every":2,"extra":2,"wait":1,"defend":1,"keep":2,"targets":2,"bigVal":2.4,"defW":3,"takeW":1.6,"distDef":1500,"distTake":1200,"enemyW":0.25,"hold":45,"growLow":0.35,"growN":6,"atkBase":0.18,"defFx":0.2,"fxRatio":0.12,"rbSkip":0,"rbMin":1.5,"spikeFire":0.9,"spikeRange":460,"spikeFlee":320,"plR":450,"homeBaseR":1400,"homeBaseP":0.35,"growBaseR":900},
   "normal":{"every":5,"extra":1,"wait":0,"defend":0.5,"keep":1,"targets":1,"bigVal":1.4,"defW":3,"takeW":1.6,"distDef":1500,"distTake":1200,"enemyW":0.25,"hold":45,"growLow":0.35,"growN":6,"atkBase":0.18,"defFx":0.2,"fxRatio":0.12,"rbSkip":0.5,"rbMin":1.5,"spikeFire":0.55,"spikeRange":460,"spikeFlee":320,"plR":450,"homeBaseR":1400,"homeBaseP":0.35,"growBaseR":900}
 }/*AIP-END*/;
-const aip = f => (typeof __AIP_OVR!=='undefined' && __AIP_OVR && __AIP_OVR[f]) || AIP_DEF[levelOf(f)] || AIP_DEF.normal;
+const aip = f => (typeof __AIP_OVR!=='undefined' && __AIP_OVR && __AIP_OVR[f]) || (human(f) ? AIP_DEF.strong : AIP_DEF[levelOf(f)]) || AIP_DEF.normal;
 function aiBaseTick(dt){
   if(!S.aiBt) S.aiBt=[0,0,0,0];
   for(let f=0;f<4;f++){
@@ -429,7 +435,7 @@ function refreshTeams(){
   HUM=[0,1,2,3].map(f=>PL.some(p=>p.f===f && !p.gone));
   NAMES=[0,1,2,3].map(f=>PL.filter(p=>p.f===f && !p.gone).map(p=>p.name).filter(Boolean).join('・'));
 }
-const blankInput=()=>({x:0,y:0,fi:0,m:'grow',sw:null,oq:[]});
+const blankInput=()=>({x:0,y:0,fi:0,m:'grow',sw:null,oq:[],ctl:'man',map:false});
 let INP=[blankInput()], SEEN=[{fi:0,sw:0,od:0}];
 const human = f => !S.demo && HUM[f];
 // 細胞のモード：人のプレイヤーの子細胞はその人が選んでいるモード、それ以外は陣営の割合で
@@ -999,7 +1005,7 @@ function update(dt){
   S.t+=dt; if(!S.demo || S.watch) S.time-=dt;
   // この画面の操作を自分の陣営の入力欄へ。ホストは参加者の操作も読み込む
   const mw=screenToWorld(pointer.x,pointer.y);
-  if(MP>=0 && !S.demo && INP[MP]){ const I=INP[MP]; I.x=mw.x; I.y=mw.y; I.m=selMode; }
+  if(MP>=0 && !S.demo && INP[MP]){ const I=INP[MP]; I.x=mw.x; I.y=mw.y; I.m=selMode; I.ctl=ctlMode; I.map=!bm.hidden; }
   if(S.net==='host') readRemoteInputs();
   counts=[0,0,0,0]; for(const c of cells) counts[c.f]++;
   cellGrid=buildGrid(cells); foodGrid=buildGrid(foods);
@@ -1065,8 +1071,9 @@ function update(dt){
   for(let i=0;i<n;i++){
     const c=cells[i]; if(c.dead) continue;
     c.splitCd-=dt; c.fuseCd-=dt; c.fireCd-=dt; c.pop=Math.min(1,c.pop+dt*4);
-    if(c.ord && steerOrder(c)) {}
-    else if(c.leader && c.pid>=0 && human(c.f)) idleLeader(c);
+    const PI=c.leader && c.pid>=0 && human(c.f) ? INP[c.pid] : null;
+    if(PI && PI.ctl!=='auto' && !PI.map){ c.ord=null; followMouse(c,PI); }
+    else if(c.ord && steerOrder(c)) {}
     else if(c.leader) steerAI(c,dt);
     else steerMode(c,dt);
     // 大きいほど遅い：小さい細胞（質量20以下）を1として、質量150以上で0.8倍
@@ -1683,7 +1690,7 @@ quitBtn.addEventListener('click',()=>{
 });
 // 観戦中はモード選択と自分の成績を隠し、観戦の操作を出す
 // speed=false のとき（オンライン対戦の観戦）は、全員共通の速さなので速さのボタンを出さない
-function setWatchUI(on,speed=true,lv=false){ el('sec-watch').hidden=!on; el('sec-mode').hidden=on; el('my-stats').hidden=on; el('w-speed').hidden=!speed; el('w-speed-title').hidden=!speed; el('w-lv').hidden=!lv; el('w-lv-title').hidden=!lv; if(lv) renderWatchLv(); }
+function setWatchUI(on,speed=true,lv=false){ el('sec-watch').hidden=!on; el('sec-mode').hidden=on; el('sec-ctl').hidden=on; el('my-stats').hidden=on; el('w-speed').hidden=!speed; el('w-speed-title').hidden=!speed; el('w-lv').hidden=!lv; el('w-lv-title').hidden=!lv; if(lv) renderWatchLv(); }
 // AI観戦：陣営ごとの強さの切り替え（観戦の途中でも変えられる）
 function renderWatchLv(){
   el('w-lv').innerHTML=FACTIONS.map((f,i)=>`<div class="lvrow"><i style="background:${f.color}"></i><span>${f.name}</span><div class="seg" data-f="${i}"><button type="button" data-lv="normal" aria-pressed="${watchLv[i]==='normal'}">普通</button><button type="button" data-lv="strong" aria-pressed="${watchLv[i]==='strong'}">強い</button></div></div>`).join('');
@@ -1812,11 +1819,10 @@ function steerOrder(c){
   if(d>keep) setDir(c,dx,dy); else { c.dx=-dx/d*.4-dy/d*.3; c.dy=-dy/d*.4+dx/d*.3; }
   return true;
 }
-// 人の元祖細胞が命令を受けていないとき：止まった場所の周りで養分を食べて待つ
-function idleLeader(c){
-  if(!c.home) c.home={x:c.x,y:c.y};
-  if(spikeFlee(c)) return;
-  seekFood(c,c.home,170);
+// 操作モード：元祖細胞はマウス（タッチ）の位置へ泳ぐ
+function followMouse(c,mw){
+  let dx=mw.x-c.x, dy=mw.y-c.y; const d=Math.hypot(dx,dy)||1;
+  const s=Math.min(1,d/90); c.dx=dx/d*s; c.dy=dy/d*s;
 }
 // 乗り換え：プレイヤー p の元祖細胞を、その人の細胞 id に移す（SWITCH_CD 秒に1回）
 const SWITCH_CD=5;
@@ -1912,6 +1918,7 @@ el('b-map').addEventListener('pointerdown',e=>{ e.preventDefault(); openBigMap(b
 // 左クリック／ドラッグで自分の細胞を選び、右クリックで命令する。カメラは WASD・矢印・画面の端・ホイールで自分で動かす。
 // 選択はこの画面だけのもの。命令は1人プレイとホストならその場で、参加者は presence でホストへ送る（直近 6 件）
 const SEL=new Set(), keys=new Set(), MODE_NAME={atk:'攻撃',def:'防御',grow:'増殖'};
+let ctlMode='man'; try{ if(localStorage.getItem('baiyou-ctl')==='auto') ctlMode='auto'; }catch(e){}
 let ordN=0, marks=[], camZ=.6, CAMF=true, drag=null, lastClick={t:0,id:-1}, pointerIn=false;
 const selectedCells = () => MP<0 ? [] : cells.filter(c=>!c.dead && c.f===ME && c.pid===MP && SEL.has(wid(c)));
 const myCells = () => MP<0 ? [] : cells.filter(c=>!c.dead && c.f===ME && c.pid===MP);
@@ -1945,6 +1952,7 @@ function pickTarget(w){
 function orderAt(w,moveOnly){
   if(!playing()) return;
   let ids=selectedCells().map(wid);
+  if(ctlMode!=='auto'){ const L=S.pleaders[MP]; if(L) ids=ids.filter(id=>id!==wid(L)); if(!ids.length) return; }
   if(!ids.length){ const L=S.pleaders[MP]; if(!L) return; ids=[wid(L)]; }
   const tg=moveOnly ? null : pickTarget(w);
   if(tg) sendOrder({t:'atk', ids, tk:tg.s?'s':'c', tid:tg.s?tg.o.id:wid(tg.o)});
@@ -1969,7 +1977,7 @@ cv.addEventListener('pointermove',e=>{
   d.x1=pointer.x; d.y1=pointer.y;
   if(Math.hypot(d.x1-d.x0,d.y1-d.y0)>8) d.moved=true;
   // タッチのドラッグはカメラ移動
-  if(d.touch && d.moved){ CAMF=false; S.cam.x=d.cx-(d.x1-d.x0)/S.cam.z; S.cam.y=d.cy-(d.y1-d.y0)/S.cam.z; }
+  if(d.touch && d.moved && ctlMode==='auto'){ CAMF=false; S.cam.x=d.cx-(d.x1-d.x0)/S.cam.z; S.cam.y=d.cy-(d.y1-d.y0)/S.cam.z; }
 });
 cv.addEventListener('pointerdown',e=>{
   setPointer(e); pointerIn=true;
@@ -2023,14 +2031,29 @@ addEventListener('keydown',e=>{
   if(['Space','ArrowUp','ArrowDown','ArrowLeft','ArrowRight'].includes(e.code) && e.preventDefault) e.preventDefault();
   if(e.code==='Space') CAMF=true;
   if(e.code==='KeyQ') selectAll();
+  if(e.code==='Tab'){ if(e.preventDefault) e.preventDefault(); setCtl(ctlMode==='auto'?'man':'auto',true); }
   if(e.code==='KeyH'){ const ids=selectedCells().map(wid); if(ids.length){ sendOrder({t:'stop',ids}); toast('命令を消した（自動で動く）'); } }
   if(e.code==='KeyC'){ const sel=selectedCells(); if(sel.length===1 && !sel[0].leader) requestSwitch(wid(sel[0])); else toast('乗り換える細胞を1つだけ選んでください'); }
 });
 addEventListener('keyup',e=>keys.delete(e.code));
 addEventListener('blur',()=>keys.clear());
 el('b-all').addEventListener('pointerdown',e=>{ e.preventDefault(); if(playing()) selectAll(); });
+el('b-ctl').addEventListener('pointerdown',e=>{ e.preventDefault(); setCtl(ctlMode==='auto'?'man':'auto',true); });
+el('ctl-seg').addEventListener('click',e=>{ const b=e.target.closest('button[data-c]'); if(b) setCtl(b.dataset.c,true); });
+// 操作の方式：man＝元祖細胞がマウスに追従しカメラは元祖細胞を追う（マップを開いている間はオート）、auto＝RTS（右クリックの命令とオート、カメラは自由）
+function setCtl(m,say){
+  ctlMode=m==='auto'?'auto':'man'; try{ localStorage.setItem('baiyou-ctl',ctlMode); }catch(err){}
+  pressOnly(el('ctl-seg'),'c',ctlMode); el('b-ctl').textContent=ctlMode==='auto'?'オート':'操作';
+  if(ctlMode==='man') CAMF=true;
+  if(say && S && !S.demo) toast(ctlMode==='auto' ? 'オートモード：元祖細胞は自分で動く。右クリックで命令、カメラは WASD・画面の端' : '操作モード：元祖細胞がマウスについてくる');
+}
+setCtl(ctlMode,false);
 // カメラ：キー・画面の端で動かし、何も押していなければ（Space を押したあとは）元祖細胞を追う
 function rtsCamera(dt,L){
+  if(ctlMode!=='auto'){
+    if(L){ const k=Math.min(1,dt*4); S.cam.x+=(L.x-S.cam.x)*k; S.cam.y+=(L.y-S.cam.y)*k; }
+    S.cam.z+=(camZ-S.cam.z)*Math.min(1,dt*10); return;
+  }
   const z=S.cam.z; let px=0, py=0;
   if(keys.has('KeyA')||keys.has('ArrowLeft')) px--;
   if(keys.has('KeyD')||keys.has('ArrowRight')) px++;
@@ -2093,14 +2116,15 @@ function showTitle(){
 }
 // タイトル画面の「遊び方」（タブごと）
 const HOWTO=[
-  [['左クリック','自分の細胞を1つ選ぶ。Shift を押しながらで追加・外す。ダブルクリックで同じモードの細胞を全部選ぶ'],
+  [['Tab','操作モード：元祖細胞がマウスについてきて、カメラも追う（全体マップを開いている間だけ自分で動く）。オートモード（RTS）：元祖細胞は自分で動き、右クリックの命令に従う。カメラは自由。右のパネルでも切り替えられる'],
+   ['左クリック','自分の細胞を1つ選ぶ。Shift を押しながらで追加・外す。ダブルクリックで同じモードの細胞を全部選ぶ'],
    ['左ドラッグ','四角で囲んだ自分の細胞をまとめて選ぶ'],
-   ['右クリック','選んだ細胞への命令。地面なら移動（着いたらその周りでモードどおりに動く）、敵の細胞や白いトゲなら攻撃。何も選んでいなければ元祖細胞（王冠）が動く'],
+   ['右クリック','選んだ細胞への命令。地面なら移動（着いたらその周りでモードどおりに動く）、敵の細胞や白いトゲなら攻撃。オートモードで何も選んでいなければ元祖細胞（王冠）が動く'],
    ['1 2 3','選んだ細胞のモードを攻撃・防御・増殖に変える。何も選んでいないときは、次に生まれる細胞のモードを決める'],
    ['F','元祖細胞が、自分の色のプラスミドをカーソルの方向へ撃つ'],
    ['Q ／ H ／ C','全部選ぶ ／ 命令を消して自動に戻す ／ 選んだ1つの細胞に元祖細胞を乗り換える（5秒に1回）'],
-   ['カメラ','WASD・矢印キー・画面の端でカメラを動かす。ホイールでズーム。Space で元祖細胞へ戻る。M で全体マップ（右クリックでそこへ移動）'],
-   ['スマホ','細胞をタップで選ぶ、地面をタップで移動、ドラッグでカメラ移動。ボタンで発射・全選択・マップ']],
+   ['カメラ','ホイールでズーム。オートモードでは WASD・矢印キー・画面の端で動かし、Space で元祖細胞へ戻る。M で全体マップ（右クリックでそこへ移動）'],
+   ['スマホ','細胞をタップで選ぶ、地面をタップで移動の命令。操作モードはドラッグで元祖細胞を動かし、オートモードはドラッグでカメラ移動。ボタンで切り替え・発射・全選択・マップ']],
   [['成長','緑の粒（養分）を食べると大きくなり、プラスミドの容量が 3 → 5 → 7 → 9 個と増える。9個そろうと4個と5個に分裂する'],
    ['プラスミド','細胞の中のハートの四角。自分では増えない。漂う白いプラスミド、自分の拠点に湧く自分の色のもの、味方の弾で増える'],
    ['乗っ取り','他の色のプラスミドが自分の色より多くなると、その細胞は寝返る。弾を当てた敵には自分の色が入る。味方に当てると治す・補充する'],
@@ -2214,7 +2238,7 @@ function readRemoteInputs(){
     if(!q) continue;
     const I=INP[k];
     I.x=clampN(q.x,-DISH_R,DISH_R); I.y=clampN(q.y,-DISH_R,DISH_R);
-    I.fi=Math.max(I.fi,q.fi|0); I.m=MODES.includes(q.m)?q.m:'grow';
+    I.fi=Math.max(I.fi,q.fi|0); I.m=MODES.includes(q.m)?q.m:'grow'; I.ctl=q.ctl==='auto'?'auto':'man'; I.map=!!q.map;
     // 命令は直近のいくつかが届く。まだ実行していない番号のものを順に実行する
     if(Array.isArray(q.oq)) for(const o of q.oq.slice(-6)){ if(o && (o.n|0)>SEEN[k].od){ SEEN[k].od=o.n|0; applyOrder(k,decodeOrder(o)); } }
     if(q.sw && (q.sw.n|0)>SEEN[k].sw){ SEEN[k].sw=q.sw.n|0; applySwitch(k,q.sw.id|0); }
@@ -2355,8 +2379,8 @@ function clientFrame(dt){
   }
   if(ME>=0 && RM.R){
     const mw=screenToWorld(pointer.x,pointer.y), I=INP[MP];
-    I.x=mw.x; I.y=mw.y; I.m=selMode;
-    RM.R.presence({g:NET.g, in:{x:Math.round(I.x),y:Math.round(I.y),fi:I.fi,m:I.m,oq:I.oq,sw:I.sw}}).catch(()=>{});
+    I.x=mw.x; I.y=mw.y; I.m=selMode; I.ctl=ctlMode; I.map=!bm.hidden;
+    RM.R.presence({g:NET.g, in:{x:Math.round(I.x),y:Math.round(I.y),fi:I.fi,m:I.m,oq:I.oq,sw:I.sw,ctl:I.ctl,map:I.map?1:0}}).catch(()=>{});
   }
   if(now-NET.lastRecv>6000) netLost();
 }
@@ -2603,7 +2627,7 @@ function beginNet(role,g,players,mp){
   overlay.hidden=true; setWatchUI(false);
   newGame(false,false,{net:role, players:players.map(p=>({f:p[1]|0, name:p[2]})), mp:mp>=0?mp:-1});
   if(role==='client'){ cells=[]; foods=[]; dnas=[]; shots=[]; S.leaders=[null,null,null,null]; S.pleaders=PL.map(()=>null); }
-  el('sec-mode').hidden=ME<0; el('my-stats').hidden=ME<0;
+  el('sec-mode').hidden=ME<0; el('sec-ctl').hidden=ME<0; el('my-stats').hidden=ME<0;
   const mates=ME>=0 ? PL.filter((p,k)=>k!==MP && p.f===ME).length : 0;
   toast(ME>=0 ? `${FACTIONS[ME].name}として参加`+(mates?`（${mates+1}人チーム）`:'') : '観戦として参加');
   if(role==='host') startBgClock();
