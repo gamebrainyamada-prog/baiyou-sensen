@@ -307,7 +307,7 @@ const MIN_SPLIT = 36, P_MAX = 9, DNA_N = 130, CAP = Infinity, FOOD_N = 2800, MAT
 const FOOD_START = 880, FOOD_RAMP = 200;
 const MATCH_LABEL = `${MATCH_TIME/60}分`;
 // バージョン：BUILD は単体版を作るとき（build-standalone.js）に作成日時で置き換わる
-const APP_VERSION='2.8', BUILD='2026/10/29 17:16';
+const APP_VERSION='2.9', BUILD='2026/10/29 17:24';
 const versionLabel = () => `Ver ${APP_VERSION}`+(BUILD.startsWith('__')?'':`（${BUILD} 更新）`);
 const SPEED = 150;
 // プラスミドが容量いっぱいのときの養分の吸収率（次の容量へ育つ速さ）
@@ -451,7 +451,7 @@ const blankInput=()=>({x:0,y:0,fi:0,m:'grow',sw:null,oq:[],ctl:'man',map:false})
 let INP=[blankInput()], SEEN=[{fi:0,sw:0,od:0}];
 const human = f => !S.demo && HUM[f];
 // 細胞のモード：人のプレイヤーの子細胞はその人が選んでいるモード、それ以外は陣営の割合で
-const modeOf = c => c.pid>=0 && human(c.f) && INP[c.pid] ? INP[c.pid].m : pickMode(c.f);
+const modeOf = c => c.pid>=0 && human(c.f) && INP[c.pid] && !(PL[c.pid] && PL[c.pid].ai) ? INP[c.pid].m : pickMode(c.f);
 // その細胞を受け持つプレイヤーの元祖細胞（なければ陣営の元祖細胞）
 const ownerLeader = c => c.pid>=0 && S.pleaders && S.pleaders[c.pid] ? S.pleaders[c.pid] : S.leaders[c.f];
 // 陣営 f のプレイヤーのうち、細胞 c に一番近い元祖細胞を持つ人（いなければその陣営の最初の人、人がいなければ -1）
@@ -463,7 +463,8 @@ function nearestPid(f,c){
 // AIの陣営は全体の能力（速さ・発射の間隔）を0.9倍にする
 // AIの強さ：'normal'＝普通（能力0.9倍・攻撃は自分の視界の中だけ）、'strong'＝強い（以前のAI：能力1.0倍・攻撃は約700まで探す・
 // 元祖細胞が大きくなると自分で分裂する）。人が操作する陣営の細胞には効かない。選んだ値はこの画面に覚えておく
-let aiLevel='normal';
+let aiLevel='normal', aiMates=0;
+try{ aiMates=Math.max(0,Math.min(2,+(localStorage.getItem('baiyou-mates')||0)|0)); }catch(e){}
 try{ if(localStorage.getItem('baiyou-ai')==='strong') aiLevel='strong'; }catch(e){}
 // AI観戦では陣営ごとに強さを選べる（watchLv）。それ以外は aiLevel が全AIに効く
 let watchLv=['normal','normal','normal','normal'];
@@ -502,10 +503,11 @@ let cells=[], foods=[], dnas=[], shots=[], parts=[], zones=[], S, counts=[0,0,0,
 // opts（オンライン対戦用）：net='host'|'client'、players＝[{f,name}]（同じ f が複数あればチーム）、mp＝この画面のプレイヤー番号（-1 は観戦）
 function newGame(demo, watch=false, opts={}){
   cells=[]; foods=[]; dnas=[]; shots=[]; parts=[]; zones=[];
-  PL = demo ? [] : (opts.players || [{f:0,name:''}]).map(p=>({f:Math.min(3,Math.max(0,p.f|0)), name:cleanName(p.name), gone:false}));
+  // ai：AIの仲間（人のチームに入り、自分の元祖細胞をAIの判断で動かす）
+  PL = demo ? [] : (opts.players || [{f:0,name:''}]).map(p=>({f:Math.min(3,Math.max(0,p.f|0)), name:cleanName(p.name), gone:false, ai:!!p.ai}));
   MP = demo ? -1 : (opts.mp ?? 0); ME = MP>=0 && PL[MP] ? PL[MP].f : -1;
   refreshTeams();
-  INP=PL.map(blankInput); SEEN=PL.map(()=>({fi:0,sw:0,od:0})); SEL.clear(); ORDL.clear(); ordN=0; marks=[]; camZ=.6; CAMF=true;
+  INP=PL.map(p=>({...blankInput(), ctl:p.ai?'auto':'man'})); SEEN=PL.map(()=>({fi:0,sw:0,od:0})); SEL.clear(); ORDL.clear(); ordN=0; marks=[]; camZ=.6; CAMF=true;
   S = {t:0, time:MATCH_TIME, over:false, demo, watch, net:opts.net||null, nameNo:[0,0,0,0], follow:-1, speed:1, nextZone:18, sanct:null, nextSanct:45, sanctId:0, spikes:[], spikeId:0, nextSpikeAt:SPIKE_AT, bases:makeBases(), swCd:PL.map(()=>0), pleaders:PL.map(()=>null), pmass:PL.map(()=>0), cvS:[0,0,0,0], cvL:[0,0,0,0], eaten:0, peak:0, splits:0, dnaGot:0, converted:0, hijacked:0,
        cam:{x:0,y:0,z:demo?0.32:0.9}, mass:[0,0,0,0], out:[false,false,false,false], leaders:[null,null,null,null]};
   for(let i=0;i<FOOD_N;i++){
@@ -2218,6 +2220,7 @@ function showTitle(){
       <p class="lead">シャーレの中で4つの菌株が養分とプラスミドを奪い合う。どの株も細胞1つから始まる。細胞を選んで命令し、拠点を取り、敵の細胞を乗っ取って増やす。${MATCH_LABEL}後にいちばん多くのバイオマスを残した陣営が勝つ。</p>
       <div class="factions">${FACTIONS.map((f,i)=>`<span><i style="background:${f.color}"></i>${f.name}${i===0?'（あなた）':''}</span>`).join('')}</div>
       ${aiLevelField()}
+      <div class="field"><span class="hud-title">AIの仲間（1人プレイ。あなたと同じシアン株で、自分で動く）</span><div class="seg ai-seg" id="ai-mates">${[0,1,2].map(n=>`<button type="button" data-n="${n}" aria-pressed="${aiMates===n}">${n?n+'体':'なし'}</button>`).join('')}</div></div>
       <div class="btns"><button class="btn" id="go" type="button">培養開始</button><button class="btn ghost" id="online" type="button">オンライン対戦</button><button class="btn ghost" id="watch" type="button">AI同士の対戦を見る</button></div>
     </div>
     <div class="col howto">
@@ -2229,6 +2232,7 @@ function showTitle(){
   el('go').addEventListener('click',startGame);
   el('online').addEventListener('click',showLobby);
   el('watch').addEventListener('click',startWatch);
+  el('ai-mates').addEventListener('click',e=>{ const b=e.target.closest('button[data-n]'); if(!b) return; aiMates=+b.dataset.n; try{ localStorage.setItem('baiyou-mates',aiMates); }catch(err){} pressOnly(el('ai-mates'),'n',aiMates); });
   const tabs=el('how-tabs'), show=i=>{ pressOnly(tabs,'h',i); el('how-pane').innerHTML=HOWTO[i].map(([a,b])=>`<dt>${a}</dt><dd>${b}</dd>`).join(''); };
   tabs.addEventListener('click',e=>{ const b=e.target.closest('button[data-h]'); if(b) show(+b.dataset.h); });
   show(0);
@@ -2257,7 +2261,7 @@ const HOWTO=[
    ['保護区','一番弱い陣営の近くに20秒だけ出る正方形。最初に入った色だけが入れ、中は養分とプラスミドが2倍'],
    ['戦場の霧','見えるのは自分の細胞の周りだけ。全体マップは一度見た場所だけ明るくなる'],
    ['壁','撃ったプラスミドやあふれたプラスミドは、シャーレの壁に当たるとそこで止まる'],
-   ['チーム戦','オンラインでは同じ色に何人でも座れる。それぞれが自分の元祖細胞と、自分が生んだ細胞を操作する']],
+   ['チーム戦','オンラインでは同じ色に何人でも座れる。それぞれが自分の元祖細胞と、自分が生んだ細胞を操作する。人の色には AIの仲間 も足せる（1人プレイはタイトルで選ぶ）']],
 ];
 // AIの強さの選択欄（タイトル画面と、オンラインのホストのルーム画面）
 function aiLevelField(){
@@ -2270,7 +2274,9 @@ function bindAiLevel(){
     pressOnly(box,'lv',aiLevel); });
 }
 function startGame(){
-  leaveLobby(); overlay.hidden=true; setWatchUI(false); newGame(false); toast('シアン株を接種しました');
+  leaveLobby(); overlay.hidden=true; setWatchUI(false);
+  newGame(false,false,{players:[{f:0,name:''}, ...[...Array(aiMates)].map((_,k)=>({f:0,name:'AIの仲間'+(aiMates>1?k+1:''),ai:true}))], mp:0});
+  toast(aiMates ? `シアン株を接種しました（AIの仲間 ${aiMates}体）` : 'シアン株を接種しました');
 }
 function startWatch(){
   overlay.hidden=true; setWatchUI(true,true,true); newGame(true,true); setFollow(-1); setSpeed(1); toast('AI同士の対戦を開始');
@@ -2369,8 +2375,12 @@ function readRemoteInputs(){
 // プレイヤーが抜けた：その人の細胞はチームの仲間が引き継ぐ。仲間がいなければ、その陣営はAIになる
 function playerLeft(k){
   const p=PL[k]; p.gone=true;
-  const mate=PL.findIndex((q,j)=>j!==k && !q.gone && q.f===p.f);
-  for(const c of cells) if(c.pid===k){ c.pid=mate; if(mate>=0 && c.leader) c.leader=false; c.anchor=null; }
+  const mate=PL.findIndex((q,j)=>j!==k && !q.gone && !q.ai && q.f===p.f);
+  if(mate<0) PL.forEach(q=>{ if(q.ai && q.f===p.f) q.gone=true; });
+  for(const c of cells){
+    if(c.pid===k){ c.pid=mate; if(mate>=0 && c.leader) c.leader=false; c.anchor=null; }
+    else if(mate<0 && c.f===p.f && c.pid>=0){ c.pid=-1; c.anchor=null; }
+  }
   refreshTeams(); buildFrows();
   toast((p.name||'プレイヤー')+'が抜けました。'+(mate>=0 ? '細胞はチームの仲間が引き継ぎます' : FACTIONS[p.f].name+'はAIが引き継ぎます'));
 }
@@ -2390,7 +2400,7 @@ function sendSnap(){
   for(const t of strs){ if(cur.length+t.length>lim){ chunks.push(cur); cur=''; lim=CHUNK; } cur+=t; }
   chunks.push(cur);
   const z=S.sanct;
-  const h={t:Math.round(S.time*10)/10, m:S.mass.map(Math.round), n:counts, pl:PL.map(p=>[p.f,p.name,p.gone?1:0]),
+  const h={t:Math.round(S.time*10)/10, m:S.mass.map(Math.round), n:counts, pl:PL.map(p=>[p.f,p.name,p.gone?1:0,p.ai?1:0]),
            z: z ? [z.id, z.x, z.y, z.s, z.owner, z.for, Math.round(z.t*10)/10] : null,
            k: S.spikes.map(k=>[k.id, Math.round(k.x), Math.round(k.y), k.hp, Math.round(k.rot*100)/100, k.flash>0?1:0]),
            b: S.bases.map(b=>[b.owner, b.cf, Math.round(b.prog*100)])};
@@ -2442,7 +2452,7 @@ function applySnap(parts){
   if(Array.isArray(h.n)) counts=[0,1,2,3].map(i=>h.n[i]|0);
   // プレイヤー一覧（抜けた人の反映もここで）
   if(Array.isArray(h.pl)){
-    const np=h.pl.slice(0,32).filter(Array.isArray).map(e=>({f:Math.min(3,Math.max(0,e[0]|0)), name:cleanName(e[1]), gone:!!e[2]})), key=JSON.stringify(np);
+    const np=h.pl.slice(0,32).filter(Array.isArray).map(e=>({f:Math.min(3,Math.max(0,e[0]|0)), name:cleanName(e[1]), gone:!!e[2], ai:!!e[3]})), key=JSON.stringify(np);
     if(key!==NET.plKey){ NET.plKey=key; PL=np; while(INP.length<PL.length){ INP.push(blankInput()); SEEN.push({fi:0,sw:0,od:0}); } refreshTeams(); buildFrows(); }
   }
   const prev=new Map(cells.map(c=>[c.id,c])), next=[];
@@ -2636,7 +2646,7 @@ async function enterRoom(code,host,lock=false){
   roomStatus(host ? 'ルームを作っています…' : 'ルームに接続しています…');
   try{ R=await room.join('baiyou-'+code, host); }
   catch(e){ roomStatus((P2P && e && e.message ? e.message+'。' : 'ルームに入れませんでした。')+'少し待ってからもう一度試してください。'); return; }
-  Object.assign(RM,{code, R, host, lock:host && !!lock, ai:[false,false,false,false], seat:host?0:-1, cdAt:0, blocked:false, lastCd:null, lastN:-1, html:''});
+  Object.assign(RM,{code, R, host, lock:host && !!lock, ai:[false,false,false,false], mates:[0,0,0,0], seat:host?0:-1, cdAt:0, blocked:false, lastCd:null, lastN:-1, html:''});
   NET.inLobby=false; NET.inRoom=true; NET.liveG=null;
   R.on('start',onStart); R.on('snap',onSnap); R.on('food',onFood); R.on('ev',onEv); R.on('end',onEnd);
   R.onPeers(()=>renderRoom());
@@ -2650,7 +2660,7 @@ function leaveRoom(){
 function roomPresence(){
   if(!RM.R) return;
   const cd = RM.host && RM.cdAt ? Math.max(0,Math.ceil((RM.cdAt-performance.now())/1000)) : null;
-  RM.R.presence({seat:RM.seat, name:LOB.name, host:RM.host||null, ai:RM.host?RM.ai:null, cd, here:NET.inRoom?1:null, g:null, in:null}).catch(()=>{});
+  RM.R.presence({seat:RM.seat, name:LOB.name, host:RM.host||null, ai:RM.host?RM.ai:null, mates:RM.host?RM.mates:null, cd, here:NET.inRoom?1:null, g:null, in:null}).catch(()=>{});
 }
 // 席（色）の状態：人がいれば人（同じ色に何人でも＝チーム）、いなければホストの設定でAIか空き
 function seatsState(){
@@ -2665,6 +2675,9 @@ function seatsState(){
     const who={peer:p.peer, name:cleanName(p.presence.name), me:p.sameTab, away:!p.sameTab && !p.presence.here};
     const t=st[s]; t.kind='human'; t.list.push(who); if(who.me) t.me=true; if(who.away) t.away=true;
   }
+  // AIの仲間の数（人が座っている色だけ有効）
+  const mates=hostP && Array.isArray(hostP.presence.mates) ? [0,1,2,3].map(i=>Math.max(0,Math.min(3,hostP.presence.mates[i]|0))) : [0,0,0,0];
+  st.forEach((t,i)=>{ t.mates = t.kind==='human' ? mates[i] : 0; });
   return {st, hostP, cd:hostP ? hostP.presence.cd : null};
 }
 function showRoom(){
@@ -2684,6 +2697,7 @@ function showRoom(){
     const s=+b.dataset.seat;
     if(b.dataset.act==='sit') RM.seat=s;
     else if(b.dataset.act==='stand') RM.seat=-1;
+    else if(RM.host && (b.dataset.act==='mate+' || b.dataset.act==='mate-')){ RM.mates[s]=Math.max(0,Math.min(3,RM.mates[s]+(b.dataset.act==='mate+'?1:-1))); RM.blocked=false; }
     else if(RM.host){ RM.ai[s]=b.dataset.act==='ai'; RM.blocked=false; }
     roomPresence(); renderRoom();
   });
@@ -2695,10 +2709,11 @@ function renderRoom(){
   if(!NET.inRoom || !el('room-seats')) return;
   const {st,hostP,cd}=seatsState();
   const html=st.map((s,i)=>{
-    const f=FACTIONS[i], who = s.kind==='human' ? s.list.map(w=>esc(w.name||'名前なし')+(w.me?'（あなた）':'')+(w.away?'（結果画面）':'')).join('、')+(s.list.length>1?`（${s.list.length}人チーム）`:'') : s.kind==='ai' ? 'AI' : '空き';
+    const f=FACTIONS[i], who = s.kind==='human' ? s.list.map(w=>esc(w.name||'名前なし')+(w.me?'（あなた）':'')+(w.away?'（結果画面）':'')).join('、')+(s.mates?`＋AIの仲間${s.mates}`:'')+(s.list.length+s.mates>1?`（${s.list.length+s.mates}人チーム）`:'') : s.kind==='ai' ? 'AI' : '空き';
     const acts=[];
     if(!s.me) acts.push(`<button type="button" class="mini" data-act="sit" data-seat="${i}">${s.kind==='human'?'このチームに入る':'ここに座る'}</button>`);
     if(s.me) acts.push(`<button type="button" class="mini" data-act="stand" data-seat="${i}">席を立つ</button>`);
+    if(RM.host && s.kind==='human'){ if(s.mates<3) acts.push(`<button type="button" class="mini" data-act="mate+" data-seat="${i}">＋AIの仲間</button>`); if(s.mates>0) acts.push(`<button type="button" class="mini" data-act="mate-" data-seat="${i}">−AIの仲間</button>`); }
     if(RM.host && s.kind!=='human') acts.push(`<button type="button" class="mini" data-act="${s.kind==='ai'?'open':'ai'}" data-seat="${i}">${s.kind==='ai'?'空きにする':'AIにする'}</button>`);
     return `<div class="seat-card ${s.kind}${s.me?' mine':''}"><b><i style="background:${f.color}"></i>${f.name}</b><small>${who}</small><div class="acts">${acts.join('')}</div></div>`;
   }).join('');
@@ -2708,7 +2723,7 @@ function renderRoom(){
     ? (P2P ? `あなたがホストです。ルームコード「${RM.code}」を一緒に遊ぶ人に伝えてください。` : `あなたがホストです。ほかの人はロビーの一覧からこのルームに参加できます。`)
       + `空いた席は「AIにする」でAIに任せられます。対戦中のゲームはあなたの画面で動くので、終わるまでこのタブを開いたままにしてください。`
     : `ホスト：${hostP ? (cleanName(hostP.presence.name)||'名前なし') : '（いません）'}。好きな色の席に座ってください。`;
-  el('room-lead').textContent += '同じ色に座った人どうしがチームになり、それぞれが自分の元祖細胞を操作します。';
+  el('room-lead').textContent += '同じ色に座った人どうしがチームになり、それぞれが自分の元祖細胞を操作します。'+(RM.host?'人が座っている色には「＋AIの仲間」で、自分で動くAIを仲間に足せます（たとえば3人なら2人 対 1人＋AI）。':'');
   if(!hostP && !RM.host) roomStatus('ホストがルームにいません。ルームを出て、作り直してください。');
   else if(cd!=null) roomStatus(`全員そろいました。開始まで ${cd} 秒`);
   else if(RM.blocked && RM.host) roomStatus(RM.blockMsg||'開始できませんでした。');
@@ -2732,6 +2747,7 @@ async function hostStart(st){
   // プレイヤー一覧：[peer, 色, 名前]。同じ色が複数あればチーム
   const players=[];
   st.forEach((s,i)=>{ for(const w of s.list) players.push([w.peer, i, w.name||('プレイヤー'+(players.length+1))]); });
+  st.forEach((s,i)=>{ for(let k=0;k<s.mates;k++) players.push(['', i, 'AIの仲間'+(s.mates>1?k+1:''), 1]); });
   const mine=players.findIndex(p=>{ const w=st[p[1]].list.find(x=>x.peer===p[0]); return w && w.me; });
   const g=Math.random().toString(36).slice(2,10);
   try{ await RM.R.emit('start',{g,players}); }
@@ -2748,14 +2764,14 @@ function onStart(m){
   const me=RM.R.peers().find(p=>p.sameTab), players=Array.isArray(d.players) ? d.players.slice(0,32).filter(Array.isArray) : [];
   beginNet('client', String(d.g||''), players, me ? players.findIndex(p=>p[0]===me.peer) : -1);
 }
-// players：[peer, 色, 名前] の並び。mp：この画面のプレイヤー番号（-1 は観戦）
+// players：[peer, 色, 名前, AIの仲間なら1] の並び。mp：この画面のプレイヤー番号（-1 は観戦）
 function beginNet(role,g,players,mp){
   NET.inLobby=false; NET.inRoom=false; RM.host=role==='host' && RM.host; lobbyPresence();
   if(RM.R) RM.R.presence({here:null}).catch(()=>{});
-  NET.g=g; NET.seats={}; NET.plKey=''; players.forEach((p,k)=>{ NET.seats[String(p[0])]=k; });
+  NET.g=g; NET.seats={}; NET.plKey=''; players.forEach((p,k)=>{ if(!p[3]) NET.seats[String(p[0])]=k; });
   NET.lastRecv=performance.now(); NET.snapAt=0; NET.buf=null; NET.fbuf=null; NET.applied=0; NET.fapplied=0; NET.lastSnap=0; NET.lastFood=0;
   overlay.hidden=true; setWatchUI(false);
-  newGame(false,false,{net:role, players:players.map(p=>({f:p[1]|0, name:p[2]})), mp:mp>=0?mp:-1});
+  newGame(false,false,{net:role, players:players.map(p=>({f:p[1]|0, name:p[2], ai:!!p[3]})), mp:mp>=0?mp:-1});
   if(role==='client'){ cells=[]; foods=[]; dnas=[]; shots=[]; S.leaders=[null,null,null,null]; S.pleaders=PL.map(()=>null); }
   el('sec-mode').hidden=ME<0; el('sec-ctl').hidden=ME<0; el('my-stats').hidden=ME<0;
   const mates=ME>=0 ? PL.filter((p,k)=>k!==MP && p.f===ME).length : 0;
