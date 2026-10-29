@@ -205,7 +205,7 @@ h1 .sub{display:block;font-size:.3em;color:var(--dim);letter-spacing:.3em;margin
     <div id="update-bar" hidden><span id="update-text"></span><button type="button" class="btn small" id="update-reload">再読み込み</button></div>
     <div id="bigmap" hidden>
       <canvas id="bm-cv"></canvas>
-      <div class="bm-foot"><p class="bm-hint" id="bm-hint">左クリック：その場所を見る（マップを閉じる）　右クリック：選んでいる細胞をそこへ移動</p><button type="button" class="quit" id="bm-close">閉じる（M）</button></div>
+      <div class="bm-foot"><p class="bm-hint" id="bm-hint">左ドラッグ：範囲で選ぶ（Shiftで追加）　左クリック：自分の細胞を選ぶ／何もない所はその場所を見る　右クリック：選んだ細胞をそこへ移動・攻撃</p><button type="button" class="quit" id="bm-close">閉じる（M）</button></div>
     </div>
   </div>
 
@@ -306,7 +306,7 @@ const MIN_SPLIT = 36, P_MAX = 9, DNA_N = 130, CAP = Infinity, FOOD_N = 2800, MAT
 const FOOD_START = 880, FOOD_RAMP = 200;
 const MATCH_LABEL = `${MATCH_TIME/60}分`;
 // バージョン：BUILD は単体版を作るとき（build-standalone.js）に作成日時で置き換わる
-const APP_VERSION='2.4', BUILD='2026/10/29 15:57';
+const APP_VERSION='2.6', BUILD='2026/10/29 16:48';
 const versionLabel = () => `Ver ${APP_VERSION}`+(BUILD.startsWith('__')?'':`（${BUILD} 更新）`);
 const SPEED = 150;
 // プラスミドが容量いっぱいのときの養分の吸収率（次の容量へ育つ速さ）
@@ -358,7 +358,7 @@ function aiMix(f){
 // 元祖細胞：spikeFire トゲを撃つ確率・spikeRange 撃つ距離・spikeFlee 逃げ始める距離・plR プラスミドを拾いに行く距離・homeBaseR/homeBaseP 自分の拠点へ寄る距離と確率
 // 増殖：growBaseR 元祖細胞からこの距離に自分の拠点があればその周りで育つ
 const AIP_DEF=/*AIP-BEGIN*/{
-  "strong":{"every":2,"extra":2,"wait":1,"defend":1,"keep":2,"targets":2,"bigVal":2.4,"defW":3,"takeW":1.6,"distDef":1500,"distTake":1200,"enemyW":0.25,"hold":45,"growLow":0.35,"growN":6,"atkBase":0.18,"defFx":0.2,"fxRatio":0.12,"rbSkip":0,"rbMin":1.5,"spikeFire":0.9,"spikeRange":460,"spikeFlee":320,"plR":450,"homeBaseR":1400,"homeBaseP":0.35,"growBaseR":900},
+  "strong":{"every":5.8244,"extra":4,"wait":0.6044,"defend":0.7966,"keep":1,"targets":1,"bigVal":4,"defW":1.8534,"takeW":1.1296,"distDef":2475.6642,"distTake":870.2121,"enemyW":0.0339,"hold":25.361,"growLow":0.6018,"growN":3,"atkBase":0.1165,"defFx":0.0647,"fxRatio":0.0427,"rbSkip":0.2675,"rbMin":1.5685,"spikeFire":0.5009,"spikeRange":432.7101,"spikeFlee":350.2494,"plR":736.559,"homeBaseR":2027.778,"homeBaseP":0,"growBaseR":24.3345},
   "normal":{"every":5,"extra":1,"wait":0,"defend":0.5,"keep":1,"targets":1,"bigVal":1.4,"defW":3,"takeW":1.6,"distDef":1500,"distTake":1200,"enemyW":0.25,"hold":45,"growLow":0.35,"growN":6,"atkBase":0.18,"defFx":0.2,"fxRatio":0.12,"rbSkip":0.5,"rbMin":1.5,"spikeFire":0.55,"spikeRange":460,"spikeFlee":320,"plR":450,"homeBaseR":1400,"homeBaseP":0.35,"growBaseR":900}
 }/*AIP-END*/;
 const aip = f => (typeof __AIP_OVR!=='undefined' && __AIP_OVR && __AIP_OVR[f]) || (human(f) ? AIP_DEF.strong : AIP_DEF[levelOf(f)]) || AIP_DEF.normal;
@@ -1893,15 +1893,69 @@ function drawBigMap(){
   // 今見ている範囲
   { const z=S.cam.z; g.strokeStyle=C.ink; g.globalAlpha=.5; g.lineWidth=1; g.strokeRect(tx(S.cam.x-vw/2/z),ty(S.cam.y-vh/2/z),vw/z*sc,vh/z*sc); g.globalAlpha=1; }
   if(L){ g.strokeStyle=C.crown; g.lineWidth=2.5; g.beginPath(); g.arc(tx(L.x),ty(L.y),Math.max(7,L.r*sc+4),0,TAU); g.stroke(); }
+  const d=bmDrag;
+  if(d && d.moved){ const x=Math.min(d.x0,d.x1), y=Math.min(d.y0,d.y1), w=Math.abs(d.x1-d.x0), h=Math.abs(d.y1-d.y0); g.save(); g.globalAlpha=.1; g.fillStyle=C.ink; g.fillRect(x,y,w,h); g.globalAlpha=.85; g.strokeStyle=C.ink; g.lineWidth=1; g.setLineDash([5,4]); g.strokeRect(x+.5,y+.5,w,h); g.restore(); }
 }
 el('bm-close').addEventListener('click',()=>openBigMap(false));
 bmCv.addEventListener('contextmenu',e=>e.preventDefault());
+// 大きい全体マップの操作：左ドラッグで範囲選択、左クリックで自分の細胞を選ぶ（何もない所ならその場所を見る）、
+// 右クリックで選んでいる細胞をそこへ（敵やトゲの上なら攻撃）。タッチでは、何もない所をタップすると選んでいる細胞への命令
+let bmDrag=null;
+const bmLocal=e=>{ const b=bmCv.getBoundingClientRect(); return {x:e.clientX-b.left, y:e.clientY-b.top}; };
+function bmPickMine(w){
+  const G=bmGeom(); let best=null, bd=10/G.sc;
+  for(const c of myCells()){ const d=Math.hypot(c.x-w.x,c.y-w.y)-c.r; if(d<bd){ bd=d; best=c; } }
+  return best;
+}
+// マップ上のトゲ・見えている敵（マップは小さいので、当たり判定を広めにする）
+function bmPickTarget(w){
+  const G=bmGeom(), pad=9/G.sc;
+  for(const k of S.spikes) if(Math.hypot(k.x-w.x,k.y-w.y)<k.r+pad) return true;
+  for(const c of cells) if(!c.dead && c.f!==ME && seen(c.x,c.y,c.r) && Math.hypot(c.x-w.x,c.y-w.y)<c.r+pad) return true;
+  return false;
+}
 bmCv.addEventListener('pointerdown',e=>{
   if(!playing()) return;
   const w=bmWorld(e);
-  if(e.button===2){ orderAt(w,true); return; }
-  // 左クリック：その場所を見る
-  CAMF=false; S.cam.x=w.x; S.cam.y=w.y; openBigMap(false);
+  if(e.button===2){
+    // 敵やトゲの上なら攻撃、それ以外は移動（攻撃の相手はマップの縮尺に合わせて探す）
+    if(bmPickTarget(w)){ const z=S.cam.z, G=bmGeom(); S.cam.z=G.sc*1.2; orderAt(w); S.cam.z=z; } else orderAt(w,true);
+    return;
+  }
+  if(e.button!==0) return;
+  const p=bmLocal(e);
+  bmDrag={x0:p.x,y0:p.y,x1:p.x,y1:p.y,w0:w,shift:!!e.shiftKey,touch:e.pointerType==='touch',moved:false};
+  if(bmCv.setPointerCapture && e.pointerId!==undefined) try{ bmCv.setPointerCapture(e.pointerId); }catch(err){}
+});
+bmCv.addEventListener('pointermove',e=>{
+  const d=bmDrag; if(!d) return;
+  const p=bmLocal(e); d.x1=p.x; d.y1=p.y;
+  if(Math.hypot(d.x1-d.x0,d.y1-d.y0)>6) d.moved=true;
+  d.w1=bmWorld(e);
+});
+bmCv.addEventListener('pointerup',e=>{
+  const d=bmDrag; bmDrag=null;
+  if(!d || !playing()) return;
+  if(d.moved){
+    // 四角で囲んだ自分の細胞を選ぶ
+    const a=d.w0, b=d.w1||bmWorld(e);
+    if(!d.shift) SEL.clear();
+    const x0=Math.min(a.x,b.x), x1=Math.max(a.x,b.x), y0=Math.min(a.y,b.y), y1=Math.max(a.y,b.y);
+    let n=0; for(const c of myCells()) if(c.x>=x0 && c.x<=x1 && c.y>=y0 && c.y<=y1){ SEL.add(wid(c)); n++; }
+    if(n) toast(`${SEL.size}個を選んだ（右クリックで移動）`);
+    return;
+  }
+  const c=bmPickMine(d.w0), now=performance.now();
+  if(c){
+    const id=wid(c);
+    if(now-lastClick.t<350 && lastClick.id===id){ SEL.clear(); for(const o of myCells()) if(c.leader || (!o.leader && o.mode===c.mode)) SEL.add(wid(o)); lastClick={t:0,id:-1}; return; }
+    if(d.shift || d.touch){ SEL.has(id)?SEL.delete(id):SEL.add(id); } else { SEL.clear(); SEL.add(id); }
+    lastClick={t:now,id}; return;
+  }
+  // 何もない所：タッチで選んでいる細胞があれば命令、それ以外はその場所を見る（オートモードのみ。操作モードのカメラは元祖細胞を追う）
+  if(d.touch && selectedCells().length){ orderAt(d.w0,true); return; }
+  if(!d.shift) SEL.clear();
+  if(ctlMode==='auto'){ CAMF=false; S.cam.x=d.w0.x; S.cam.y=d.w0.y; openBigMap(false); }
 });
 el('map').addEventListener('click',()=>openBigMap(true));
 // バージョン表示。単体版（Webサイト）では1分ごとに公開中のファイルを確かめ、新しい版が出ていたら知らせる
@@ -2157,7 +2211,7 @@ const HOWTO=[
    ['1 2 3','選んだ細胞のモードを攻撃・防御・増殖に変える。何も選んでいないときは、次に生まれる細胞のモードを決める'],
    ['F','元祖細胞が、自分の色のプラスミドをカーソルの方向へ撃つ'],
    ['Q ／ H ／ C','全部選ぶ ／ 命令を消して自動に戻す ／ 選んだ1つの細胞に元祖細胞を乗り換える（5秒に1回）'],
-   ['カメラ','ホイールでズーム。オートモードでは WASD・矢印キー・画面の端で動かし、Space で元祖細胞へ戻る。M で全体マップ（右クリックでそこへ移動）'],
+   ['カメラ','ホイールでズーム。オートモードでは WASD・矢印キー・画面の端で動かし、Space で元祖細胞へ戻る。M で全体マップ（左ドラッグで範囲選択、右クリックでそこへ移動）'],
    ['スマホ','細胞をタップで選ぶ、地面をタップで移動の命令。操作モードはドラッグで元祖細胞を動かし、オートモードはドラッグでカメラ移動。ボタンで切り替え・発射・全選択・マップ']],
   [['成長','緑の粒（養分）を食べると大きくなり、プラスミドの容量が 3 → 5 → 7 → 9 個と増える。9個そろうと4個と5個に分裂する'],
    ['プラスミド','細胞の中のハートの四角。自分では増えない。漂う白いプラスミド、自分の拠点に湧く自分の色のもの、味方の弾で増える'],
