@@ -355,7 +355,7 @@ const MIN_SPLIT = 36, P_MAX = 9, DNA_N = 130, CAP = Infinity, FOOD_N = 2800, MAT
 const FOOD_START = 880, FOOD_RAMP = 200;
 const MATCH_LABEL = `${MATCH_TIME/60}分`;
 // バージョン：BUILD は単体版を作るとき（build-standalone.js）に作成日時で置き換わる
-const APP_VERSION='3.1', BUILD='2026/10/30 09:01';
+const APP_VERSION='3.2', BUILD='2026/10/30 09:14';
 const versionLabel = () => `Ver ${APP_VERSION}`+(BUILD.startsWith('__')?'':`（${BUILD} 更新）`);
 const SPEED = 150;
 // プラスミドが容量いっぱいのときの養分の吸収率（次の容量へ育つ速さ）
@@ -2973,6 +2973,8 @@ function makeP2PRoom(){
     },
     presence(patch){
       for(const k in patch){ if(patch[k]===null) delete myPres[k]; else myPres[k]=patch[k]; }
+      // 自分の画面にはすぐ反映する（ホストを往復するのを待たない。席を選んだときなどに遅れて見えないように）
+      if(up && me && ("seat" in patch || "name" in patch || "ai" in patch || "mates" in patch)) snapshot();
       if(presTimer) return Promise.resolve();
       // 1秒に約30回までにまとめて送る
       presTimer=setTimeout(()=>{ presTimer=null;
