@@ -191,6 +191,54 @@ h1 .sub{display:block;font-size:.3em;color:var(--dim);letter-spacing:.3em;margin
 .mystats{font-family:var(--f-data);font-size:12px;color:var(--dim);display:flex;flex-wrap:wrap;gap:6px 18px}
 .mystats b{color:var(--ink)}
 @media (prefers-reduced-motion:reduce){#share span{transition:none}}
+/* ---- 画面の枠とボタンの決まり ----
+   ボタンは3種類：主（.btn＝塗り。その画面でいちばん大事な操作、右下に1つ）／副（.btn.ghost＝枠）／やめる系（.btn.danger＝赤い枠）。
+   大きさは2つ：ふつう（48px）と小（.small＝34px）。.mini と .quit は小の副・小のやめる系と同じ形にそろえる */
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:8px;min-height:48px;font-family:var(--f-display);font-size:16px;color:var(--bg);background:var(--f0);border:1px solid var(--f0);border-radius:10px;padding:0 26px;cursor:pointer;letter-spacing:.06em;justify-self:auto}
+.btn.ghost{background:transparent;color:var(--ink);border-color:var(--panel-line)}
+.btn.ghost:hover{border-color:var(--dim);filter:none}
+.btn.danger{background:transparent;color:var(--warn);border-color:var(--warn)}
+.btn.small,.mini,.quit{min-height:34px;font-size:13px;padding:0 14px;border-radius:8px}
+.mini,.quit{display:inline-flex;align-items:center;justify-content:center;font-family:var(--f-body);background:transparent;border:1px solid var(--panel-line);color:var(--ink);cursor:pointer}
+.quit{color:var(--warn);border-color:rgba(255,77,94,.55)}
+.quit.armed{background:rgba(255,77,94,.14);border-color:var(--warn)}
+.seg button{min-height:34px;border-radius:8px;font-size:12px}
+.mode{border-radius:8px}
+/* 画面の枠 */
+#overlay{background:rgba(4,7,10,.72)}
+.card{width:min(560px,100%);display:grid;grid-template-rows:auto minmax(0,1fr) auto;gap:0;background:var(--panel);border:1px solid var(--panel-line);border-radius:14px;box-shadow:0 20px 60px rgba(0,0,0,.45);max-height:calc(100dvh - 32px);overflow:hidden}
+.card.wide{width:min(1000px,100%)}
+.scr-head{display:grid;grid-template-columns:auto minmax(0,1fr) auto;align-items:center;gap:12px;padding:12px 16px;border-bottom:1px solid var(--panel-line);min-height:56px}
+.scr-head .back{display:inline-flex;align-items:center;gap:4px;min-height:34px;padding:0 12px;font:inherit;font-family:var(--f-body);font-size:13px;color:var(--ink);background:transparent;border:1px solid var(--panel-line);border-radius:8px;cursor:pointer}
+.scr-head .back:hover{border-color:var(--dim)}
+.scr-head .crumb{font-family:var(--f-data);font-size:11px;letter-spacing:.14em;color:var(--f0);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.scr-head .ver{font-family:var(--f-data);font-size:10px;color:var(--dim);white-space:nowrap}
+.scr-body{display:grid;gap:16px;align-content:start;padding:20px 22px;overflow-y:auto;min-height:0}
+.scr-body h1{font-size:clamp(30px,5vw,46px)}
+.scr-foot{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:10px;padding:12px 16px;border-top:1px solid var(--panel-line)}
+.scr-foot .f-left,.scr-foot .f-right{display:flex;flex-wrap:wrap;gap:8px}
+.scr-foot .f-right{margin-left:auto}
+.cols{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:24px;align-items:start}
+.cols>div{display:grid;gap:14px;align-content:start}
+.panel-box{border:1px solid var(--panel-line);border-radius:10px;padding:12px 14px;background:rgba(4,7,10,.35)}
+@media (max-width:760px){.cols{grid-template-columns:minmax(0,1fr)}}
+/* 切り替わりの動き */
+.card.enter{animation:scrIn .18s ease-out}
+@keyframes scrIn{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:none}}
+@media (prefers-reduced-motion:reduce){.card.enter{animation:none}}
+/* タイトルのメニュー */
+.hero h1{font-size:clamp(44px,8vw,80px)}
+.hero{display:grid;gap:12px}
+.menu{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}
+.menu-item{display:grid;grid-template-columns:auto minmax(0,1fr) auto;align-items:center;gap:12px;text-align:left;font:inherit;color:var(--ink);background:rgba(4,7,10,.35);border:1px solid var(--panel-line);border-radius:12px;padding:14px 16px;cursor:pointer;min-height:76px}
+.menu-item:hover{border-color:var(--dim)}
+.menu-item:focus-visible,.scr-head .back:focus-visible,.btn:focus-visible,.mini:focus-visible,.quit:focus-visible{outline:2px solid var(--ink);outline-offset:2px}
+.menu-item.pri{border-color:var(--f0);background:var(--sel)}
+.menu-item i{width:12px;height:12px;border-radius:50%;background:var(--f0)}
+.menu-item b{display:block;font-family:var(--f-display);font-weight:400;font-size:18px;letter-spacing:.04em}
+.menu-item small{display:block;color:var(--dim);font-size:12px;line-height:1.5;margin-top:3px}
+.menu-item .go{color:var(--dim);font-family:var(--f-data)}
+@media (max-width:560px){.menu{grid-template-columns:minmax(0,1fr)}}
 </style>
 
 <div id="app">
@@ -307,7 +355,7 @@ const MIN_SPLIT = 36, P_MAX = 9, DNA_N = 130, CAP = Infinity, FOOD_N = 2800, MAT
 const FOOD_START = 880, FOOD_RAMP = 200;
 const MATCH_LABEL = `${MATCH_TIME/60}分`;
 // バージョン：BUILD は単体版を作るとき（build-standalone.js）に作成日時で置き換わる
-const APP_VERSION='2.10', BUILD='2026/10/29 17:42';
+const APP_VERSION='3.1', BUILD='2026/10/30 09:01';
 const versionLabel = () => `Ver ${APP_VERSION}`+(BUILD.startsWith('__')?'':`（${BUILD} 更新）`);
 const SPEED = 150;
 // プラスミドが容量いっぱいのときの養分の吸収率（次の容量へ育つ速さ）
@@ -1013,6 +1061,7 @@ addEventListener('keydown',e=>{
   if(typing(e)) return;
   if(e.code==='KeyF'){ if(playing()) INP[MP].fi++; }
   if(e.code==='KeyM'){ openBigMap(bm.hidden); }
+  if(e.code==='Escape' && !overlay.hidden){ const b=card.querySelector && card.querySelector('.scr-head .back'); if(b){ b.click(); return; } }
   if(e.code==='Escape'){ if(!bm.hidden) openBigMap(false); else SEL.clear(); }
   if(e.code==='Enter' && !playing() && !(S.watch && !S.over) && !S.net && !NET.inLobby && !NET.inRoom) startGame();
 });
@@ -2212,31 +2261,64 @@ function drawDragBox(){
 
 // ---------- screens ----------
 const overlay=el('overlay'), card=el('card');
-function showTitle(){
-  card.className='card title'; card.innerHTML=`
-    <div class="col">
-      <div class="eyebrow">CULTURE PLATE No.04 ／ 37°C ／ ${versionLabel()}</div>
-      <h1>培養戦線<span class="sub">COLONY WARFARE</span></h1>
-      <p class="lead">シャーレの中で4つの菌株が養分とプラスミドを奪い合う。どの株も細胞1つから始まる。細胞を選んで命令し、拠点を取り、敵の細胞を乗っ取って増やす。${MATCH_LABEL}後にいちばん多くのバイオマスを残した陣営が勝つ。</p>
-      <div class="factions">${FACTIONS.map((f,i)=>`<span><i style="background:${f.color}"></i>${f.name}${i===0?'（あなた）':''}</span>`).join('')}</div>
-      ${aiLevelField()}
-      <div class="field"><span class="hud-title">AIの仲間（1人プレイ。あなたと同じシアン株で、自分で動く）</span><div class="seg ai-seg" id="ai-mates">${[0,1,2].map(n=>`<button type="button" data-n="${n}" aria-pressed="${aiMates===n}">${n?n+'体':'なし'}</button>`).join('')}</div></div>
-      <div class="btns"><button class="btn" id="go" type="button">培養開始</button><button class="btn ghost" id="online" type="button">オンライン対戦</button><button class="btn ghost" id="watch" type="button">AI同士の対戦を見る</button></div>
-    </div>
-    <div class="col howto">
-      <div class="seg" id="how-tabs"><button type="button" data-h="0" aria-pressed="true">操作</button><button type="button" data-h="1" aria-pressed="false">細胞とモード</button><button type="button" data-h="2" aria-pressed="false">マップとイベント</button></div>
-      <dl class="hpane" id="how-pane"></dl>
-    </div>`;
+// 画面の枠：上に「戻る」と現在地（crumb）とバージョン、真ん中に中身、下に操作ボタン（foot）。
+// size は '' か 'wide'。back は {id, label}（なければ戻るボタンなし）。切り替わるときに少し動かす
+function screen(size,crumb,back,body,foot){
+  card.className='card'+(size?' '+size:'');
+  card.innerHTML=`<div class="scr-head">${back?`<button type="button" class="back" id="${back.id}">‹ ${back.label||'戻る'}</button>`:'<span></span>'}<div class="crumb">${crumb}</div><span class="ver">${versionLabel()}</span></div><div class="scr-body">${body}</div>${foot?`<div class="scr-foot">${foot}</div>`:''}`;
+  card.classList.remove('enter'); void card.offsetWidth; card.classList.add('enter');
   overlay.hidden=false;
-  setWatchUI(false); bindAiLevel();
-  el('go').addEventListener('click',startGame);
+}
+// 下の操作ボタンの並び：左に副ボタン、右に主ボタン
+const footer=(left,right)=>`<div class="f-left">${left||''}</div><div class="f-right">${right||''}</div>`;
+const CRUMB='培養戦線';
+function showTitle(){
+  screen('wide', CRUMB, null, `
+    <div class="hero">
+      <div class="eyebrow">CULTURE PLATE No.04 ／ 37°C</div>
+      <h1>培養戦線<span class="sub">COLONY WARFARE</span></h1>
+      <p class="lead">シャーレの中で4つの菌株が養分とプラスミドを奪い合う。細胞を育てて分裂させ、拠点を取り、敵の細胞を乗っ取って増やす。${MATCH_LABEL}後にいちばん多くのバイオマスを残した陣営が勝つ。</p>
+    </div>
+    <div class="menu">
+      <button type="button" class="menu-item pri" id="m-single"><i></i><span><b>1人で遊ぶ</b><small>AIの3陣営と対戦。強さとAIの仲間を選んで始める</small></span><span class="go">›</span></button>
+      <button type="button" class="menu-item" id="online"><i style="background:var(--f1)"></i><span><b>オンライン対戦</b><small>ルームを作るか一覧から参加。同じ色でチーム戦も</small></span><span class="go">›</span></button>
+      <button type="button" class="menu-item" id="watch"><i style="background:var(--f2)"></i><span><b>AI同士の対戦を見る</b><small>4陣営のAIの戦いを観戦。速さと陣営ごとの強さを変えられる</small></span><span class="go">›</span></button>
+      <button type="button" class="menu-item" id="m-howto"><i style="background:var(--f3)"></i><span><b>遊び方</b><small>操作・細胞とモード・マップとイベント</small></span><span class="go">›</span></button>
+    </div>`, '');
+  setWatchUI(false);
+  el('m-single').addEventListener('click',showSingle);
   el('online').addEventListener('click',showLobby);
   el('watch').addEventListener('click',startWatch);
+  el('m-howto').addEventListener('click',()=>showHowto(showTitle));
+  el('m-single').focus();
+}
+// 1人で遊ぶ：設定を選んで始める
+function showSingle(){
+  screen('', CRUMB+' › 1人で遊ぶ', {id:'s-back'}, `
+    <h1>1人で遊ぶ</h1>
+    <p class="lead">あなたはシアン株。ほかの3陣営はAIです。</p>
+    <div class="factions">${FACTIONS.map((f,i)=>`<span><i style="background:${f.color}"></i>${f.name}${i===0?'（あなた）':''}</span>`).join('')}</div>
+    ${aiLevelField()}
+    <div class="field"><span class="hud-title">AIの仲間（あなたと同じシアン株で、自分で動く）</span><div class="seg ai-seg" id="ai-mates">${[0,1,2].map(n=>`<button type="button" data-n="${n}" aria-pressed="${aiMates===n}">${n?n+'体':'なし'}</button>`).join('')}</div></div>
+    <div class="field"><span class="hud-title">操作の方式（対戦中も Tab で切り替えられる）</span><div class="seg ai-seg" id="s-ctl"><button type="button" data-c="man" aria-pressed="${ctlMode!=='auto'}">操作（マウスに追従）</button><button type="button" data-c="auto" aria-pressed="${ctlMode==='auto'}">オート（RTS）</button></div></div>`,
+    footer('<button class="btn ghost" id="s-howto" type="button">遊び方</button>', '<button class="btn" id="go" type="button">培養開始</button>'));
+  bindAiLevel();
+  el('s-back').addEventListener('click',showTitle);
+  el('s-howto').addEventListener('click',()=>showHowto(showSingle));
+  el('go').addEventListener('click',startGame);
   el('ai-mates').addEventListener('click',e=>{ const b=e.target.closest('button[data-n]'); if(!b) return; aiMates=+b.dataset.n; try{ localStorage.setItem('baiyou-mates',aiMates); }catch(err){} pressOnly(el('ai-mates'),'n',aiMates); });
+  el('s-ctl').addEventListener('click',e=>{ const b=e.target.closest('button[data-c]'); if(!b) return; setCtl(b.dataset.c,false); pressOnly(el('s-ctl'),'c',ctlMode); });
+  el('go').focus();
+}
+// 遊び方：タブで切り替える。戻ると、開いた元の画面へ
+function showHowto(from){
+  screen('wide', CRUMB+' › 遊び方', {id:'h-back'}, `
+    <div class="seg" id="how-tabs"><button type="button" data-h="0" aria-pressed="true">操作</button><button type="button" data-h="1" aria-pressed="false">細胞とモード</button><button type="button" data-h="2" aria-pressed="false">マップとイベント</button></div>
+    <dl class="hpane" id="how-pane"></dl>`, '');
+  el('h-back').addEventListener('click',()=>(from||showTitle)());
   const tabs=el('how-tabs'), show=i=>{ pressOnly(tabs,'h',i); el('how-pane').innerHTML=HOWTO[i].map(([a,b])=>`<dt>${a}</dt><dd>${b}</dd>`).join(''); };
   tabs.addEventListener('click',e=>{ const b=e.target.closest('button[data-h]'); if(b) show(+b.dataset.h); });
   show(0);
-  el('go').focus();
 }
 // タイトル画面の「遊び方」（タブごと）
 const HOWTO=[
@@ -2261,7 +2343,7 @@ const HOWTO=[
    ['保護区','一番弱い陣営の近くに20秒だけ出る正方形。最初に入った色だけが入れ、中は養分とプラスミドが2倍'],
    ['戦場の霧','見えるのは自分の細胞の周りだけ。全体マップは一度見た場所だけ明るくなる'],
    ['壁','撃ったプラスミドやあふれたプラスミドは、シャーレの壁に当たるとそこで止まる'],
-   ['チーム戦','オンラインでは同じ色に何人でも座れる。それぞれが自分の元祖細胞と、自分が生んだ細胞を操作する。人の色には AIの仲間 も足せる（1人プレイはタイトルで選ぶ）']],
+   ['チーム戦','オンラインでは同じ色に何人でも座れる。それぞれが自分の元祖細胞と、自分が生んだ細胞を操作する。人の色には AIの仲間 も足せる（1人プレイは「1人で遊ぶ」の画面で選ぶ）']],
 ];
 // AIの強さの選択欄（タイトル画面と、オンラインのホストのルーム画面）
 function aiLevelField(){
@@ -2293,13 +2375,12 @@ function endGame(reason){
   }
   if(S.watch || S.spectate){
     const w=rank[0].f;
-    card.className='card'; card.innerHTML=`
-      <div class="eyebrow">観戦結果</div>
+    screen('', CRUMB+' › 観戦の結果', null, `
       <h1>${w.name}の勝利</h1>
       <p class="lead">${reason==='watch-sweep' ? `${Math.floor(S.t)}秒で、${w.name}が他の株をすべて駆逐しました。` : `${MATCH_LABEL}間の培養を終え、${w.name}がバイオマス首位（${Math.round(rank[0].m/total*100)}%）でした。`}</p>
-      <div class="result-table">${rank.map((r,k)=>`<div><span>${k+1}位</span><i style="background:${r.f.color}"></i><span class="nm">${r.f.name}</span><span>${r.n}個</span><span>${Math.round(r.m)}</span></div>`).join('')}</div>
-      <div class="btns"><button class="btn" id="watch" type="button">もう一度観戦する</button><button class="btn ghost" id="go" type="button">自分で遊ぶ</button></div>`;
-    overlay.hidden=false;
+      <div class="result-table">${rank.map((r,k)=>`<div><span>${k+1}位</span><i style="background:${r.f.color}"></i><span class="nm">${r.f.name}</span><span>${r.n}個</span><span>${Math.round(r.m)}</span></div>`).join('')}</div>`,
+      footer('<button class="btn ghost" id="to-title" type="button">タイトルへ</button><button class="btn ghost" id="go" type="button">自分で遊ぶ</button>', '<button class="btn" id="watch" type="button">もう一度観戦する</button>'));
+    el('to-title').addEventListener('click',()=>{ newGame(true); showTitle(); });
     el('watch').addEventListener('click',startWatch);
     el('go').addEventListener('click',startGame);
     el('watch').focus();
@@ -2312,14 +2393,13 @@ function endGame(reason){
             : reason==='sweep' ? '他の3株をすべて駆逐しました。シャーレはシアン株のものです。'
             : won ? `${MATCH_LABEL}間の培養を終え、シアン株がバイオマス首位（${Math.round(S.mass[0]/total*100)}%）でした。`
             : `首位は${rank[0].f.name}。シアン株は${rank.findIndex(r=>r.i===0)+1}位でした。`;
-  card.className='card'; card.innerHTML=`
-    <div class="eyebrow">培養結果</div>
+  screen('', CRUMB+' › 結果', null, `
     <h1>${head}</h1>
     <p class="lead">${lead}</p>
     <div class="result-table">${rank.map((r,k)=>`<div class="${r.i===0?'me':''}"><span>${k+1}位</span><i style="background:${r.f.color}"></i><span class="nm">${r.f.name}</span><span>${r.n}個</span><span>${Math.round(r.m)}</span></div>`).join('')}</div>
-    <div class="mystats"><span>最大細胞数 <b>${S.peak}</b></span><span>拾ったプラスミド <b>${S.dnaGot}</b></span><span>乗っ取った細胞 <b>${S.converted}</b></span><span>乗っ取られた細胞 <b>${S.hijacked}</b></span></div>
-    <div class="btns"><button class="btn" id="go" type="button">もう一度培養する</button>${canSpec ? '<button class="btn ghost" id="spec" type="button">このまま観戦する</button>' : ''}<button class="btn ghost" id="watch" type="button">AI同士の対戦を見る</button></div>`;
-  overlay.hidden=false;
+    <div class="mystats"><span>最大細胞数 <b>${S.peak}</b></span><span>拾ったプラスミド <b>${S.dnaGot}</b></span><span>乗っ取った細胞 <b>${S.converted}</b></span><span>乗っ取られた細胞 <b>${S.hijacked}</b></span></div>`,
+    footer('<button class="btn ghost" id="to-title" type="button">タイトルへ</button>'+(canSpec ? '<button class="btn ghost" id="spec" type="button">このまま観戦する</button>' : '')+'<button class="btn ghost" id="watch" type="button">AI同士の対戦を見る</button>', '<button class="btn" id="go" type="button">もう一度培養する</button>'));
+  el('to-title').addEventListener('click',()=>{ newGame(true); showTitle(); });
   el('go').addEventListener('click',startGame);
   el('watch').addEventListener('click',startWatch);
   if(canSpec) el('spec').addEventListener('click',continueSpectate);
@@ -2364,7 +2444,7 @@ function readRemoteInputs(){
     if(!q) continue;
     const I=INP[k];
     I.x=clampN(q.x,-DISH_R,DISH_R); I.y=clampN(q.y,-DISH_R,DISH_R);
-    I.fi=Math.max(I.fi,q.fi|0); I.m=MODES.includes(q.m)?q.m:'grow'; I.ctl=q.ctl==='auto'?'auto':'man'; I.map=!!q.map;
+    I.fi=Math.max(I.fi,q.fi|0); I.m=MODES.includes(q.m)?q.m:'grow'; I.ctl=q.ctl==='auto'?'auto':'man'; I.map=!!q.map; I.sp=!!q.sp;
     // 命令は直近のいくつかが届く。まだ実行していない番号のものを順に実行する
     if(Array.isArray(q.oq)) for(const o of q.oq.slice(-6)){ if(o && (o.n|0)>SEEN[k].od){ SEEN[k].od=o.n|0; applyOrder(k,decodeOrder(o)); } }
     if(q.sw && (q.sw.n|0)>SEEN[k].sw){ SEEN[k].sw=q.sw.n|0; applySwitch(k,q.sw.id|0); }
@@ -2394,17 +2474,44 @@ function sendSnap(){
   const s=++NET.snapSeq;
   const sh=shots.slice(0,60).map(o=>encP(o.x)+encP(o.y)+enc((o.vx+1000)*1.9,2)+enc((o.vy+1000)*1.9,2)+o.f).join('');
   const dn=dnas.filter(d=>d.alive).slice(0,200).map(d=>encP(d.x)+encP(d.y)+(d.f+1)).join('');
-  const strs=cells.map(c=>enc(c.id%238328,3)+encP(c.x)+encP(c.y)+enc(c.mass*4,2)
-    +B62[c.f*6+MODES.indexOf(c.mode)*2+(c.leader?1:0)]+enc(c.no,2)+B62[Math.max(-1,Math.min(60,c.pid))+1]+B62[c.pl.length]+c.pl.join(''));
-  const chunks=[]; let cur='', lim=Math.max(600,CHUNK-sh.length-dn.length);
-  for(const t of strs){ if(cur.length+t.length>lim){ chunks.push(cur); cur=''; lim=CHUNK; } cur+=t; }
-  chunks.push(cur);
+  const cellStr=c=>enc(c.id%238328,3)+encP(c.x)+encP(c.y)+enc(c.mass*4,2)
+    +B62[c.f*6+MODES.indexOf(c.mode)*2+(c.leader?1:0)]+enc(c.no,2)+B62[Math.max(-1,Math.min(60,c.pid))+1]+B62[c.pl.length]+c.pl.join('');
+  const strs=cells.map(cellStr);
   const z=S.sanct;
   const h={t:Math.round(S.time*10)/10, m:S.mass.map(Math.round), n:counts, pl:PL.map(p=>[p.f,p.name,p.gone?1:0,p.ai?1:0]),
            z: z ? [z.id, z.x, z.y, z.s, z.owner, z.for, Math.round(z.t*10)/10] : null,
            k: S.spikes.map(k=>[k.id, Math.round(k.x), Math.round(k.y), k.hp, Math.round(k.rot*100)/100, k.flash>0?1:0]),
            b: S.bases.map(b=>[b.owner, b.cf, Math.round(b.prog*100)])};
-  chunks.forEach((c,i)=>netEmit('snap', i===0 ? {g:NET.g,s,i,n:chunks.length,h,c,x:sh,d:dn} : {g:NET.g,s,i,n:chunks.length,c}));
+  const send=(cs,shs,to)=>{
+    const chunks=[]; let cur='', lim=Math.max(600,CHUNK-shs.length-dn.length);
+    for(const t of cs){ if(cur.length+t.length>lim){ chunks.push(cur); cur=''; lim=CHUNK; } cur+=t; }
+    chunks.push(cur);
+    chunks.forEach((c,i)=>{ const d=i===0 ? {g:NET.g,s,i,n:chunks.length,h,c,x:shs,d:dn} : {g:NET.g,s,i,n:chunks.length,c}; if(to) RM.R.emitTo(to,'snap',d); else netEmit('snap',d); });
+  };
+  // GitHub 版（ホストが中継役）では、参加者ごとに、その陣営から見える分だけを送る（霧の外は描かれないので、見た目は同じ）。
+  // 観戦中の人には全部を送る。claude.ai 版は全員に同じものが届く仕組みなので、全部を送る
+  if(!(RM.R && RM.R.emitTo)){ send(strs,sh,null); return; }
+  const groups=new Map(), seated=new Set();
+  for(const peer in NET.seats){
+    const k=NET.seats[peer], p=PL[k]; seated.add(peer); if(!p || p.gone) continue;
+    const key=INP[k] && INP[k].sp ? 'all' : p.f;
+    if(!groups.has(key)) groups.set(key,[]); groups.get(key).push(peer);
+  }
+  for(const p of RM.R.peers()) if(!p.sameTab && !seated.has(p.peer)){ if(!groups.has('all')) groups.set('all',[]); groups.get('all').push(p.peer); }
+  for(const [key,to] of groups){
+    if(key==='all'){ send(strs,sh,to); continue; }
+    const vis=visibleTo(key), cs=[], shs=[];
+    cells.forEach((c,i)=>{ if(vis(c.x,c.y,c.r)) cs.push(strs[i]); });
+    send(cs, shots.slice(0,60).filter(o=>o.f===key || vis(o.x,o.y,0)).map(o=>encP(o.x)+encP(o.y)+enc((o.vx+1000)*1.9,2)+enc((o.vy+1000)*1.9,2)+o.f).join(''), to);
+  }
+}
+// 陣営 f から見えるか（その陣営の細胞の視界＋動く分の余裕）。自分の陣営の細胞はいつも見える
+function visibleTo(f){
+  const own=cells.filter(c=>c.f===f && !c.dead), M=140;
+  return (x,y,r)=>{
+    for(const c of own){ const R=visR(c)+r+M, dx=x-c.x, dy=y-c.y; if(dx*dx+dy*dy<R*R) return true; }
+    return false;
+  };
 }
 function sendFood(){
   const s=++NET.foodSeq;
@@ -2498,6 +2605,7 @@ function clientFrame(dt){
   for(const s of shots){ s.x+=s.vx*dt; s.y+=s.vy*dt; }
   if(S.sanct) S.sanct.t=Math.max(0,S.sanct.t-dt);
   for(const k of S.spikes){ k.x=k.fx+(k.tx-k.fx)*a; k.y=k.fy+(k.ty-k.fy)*a; }
+  predictLeader(dt);
   const L=spectating() ? (S.follow>=0 ? S.leaders[S.follow] : null) : (MP>=0 ? S.pleaders[MP] : null), k=Math.min(1,dt*3);
   if(L && !spectating()) rtsCamera(dt,L);
   else if(L){
@@ -2507,21 +2615,36 @@ function clientFrame(dt){
     S.cam.x+=(0-S.cam.x)*dt; S.cam.y+=(0-S.cam.y)*dt;
     S.cam.z+=(Math.min(vw,vh)/(DISH_R*2.1)-S.cam.z)*dt*2;
   }
+  if(ME<0 && RM.R && now-NET.lastInAt>=1000){ NET.lastInAt=now; RM.R.presence({g:NET.g, in:{sp:1}}).catch(()=>{}); }
   if(ME>=0 && RM.R){
     const mw=screenToWorld(pointer.x,pointer.y), I=INP[MP];
     I.x=mw.x; I.y=mw.y; I.m=selMode; I.ctl=ctlMode; I.map=!bm.hidden;
-    RM.R.presence({g:NET.g, in:{x:Math.round(I.x),y:Math.round(I.y),fi:I.fi,m:I.m,oq:I.oq,sw:I.sw,ctl:I.ctl,map:I.map?1:0}}).catch(()=>{});
+    const q={x:Math.round(I.x/4)*4,y:Math.round(I.y/4)*4,fi:I.fi,m:I.m,oq:I.oq,sw:I.sw,ctl:I.ctl,map:I.map?1:0,sp:spectating()?1:0}, key=JSON.stringify(q);
+    if((key!==NET.lastIn && now-NET.lastInAt>=50) || now-NET.lastInAt>=500){ NET.lastIn=key; NET.lastInAt=now; RM.R.presence({g:NET.g, in:q}).catch(()=>{}); }
   }
   if(now-NET.lastRecv>6000) netLost();
 }
+// 参加者の画面では、ホストからの位置が届くまでに遅れがあるので、自分の元祖細胞だけは手元でマウスへ動かして見せる。
+// 本当の位置（最後に届いた位置を、1回分の動きだけ先へ進めたもの）へ、1秒に2.5の割合で寄せて、ずれをためない
+function predictLeader(dt){
+  const L=MP>=0 && S.pleaders ? S.pleaders[MP] : null;
+  if(!L || ctlMode==='auto' || !bm.hidden || spectating()){ NET.pred=null; return; }
+  let P=NET.pred;
+  if(!P || P.id!==L.id || Math.hypot(P.x-L.tx,P.y-L.ty)>400) P=NET.pred={id:L.id, x:L.x, y:L.y};
+  const mw=screenToWorld(pointer.x,pointer.y), dx=mw.x-P.x, dy=mw.y-P.y, d=Math.hypot(dx,dy)||1, k=Math.min(1,d/90);
+  const sp=SPEED*(1-.2*Math.max(0,Math.min(1,(L.mass-20)/130)));
+  P.x+=dx/d*k*sp*dt; P.y+=dy/d*k*sp*dt;
+  const tx=L.tx+(L.tx-L.fx), ty=L.ty+(L.ty-L.fy), w=Math.min(1,dt*2.5);
+  P.x+=(tx-P.x)*w; P.y+=(ty-P.y)*w;
+  L.x=P.x; L.y=P.y;
+}
 function netLost(){
   if(S.over) return; S.over=true;
-  card.className='card'; card.innerHTML=`
-    <div class="eyebrow">オンライン対戦</div>
+  screen('', CRUMB+' › オンライン', null, `
     <h1>接続が切れました</h1>
-    <p class="lead">ホストの画面から6秒以上、状態が届きませんでした。ホストがページを閉じたか、タブを裏に回した可能性があります。</p>
-    <div class="btns"><button class="btn" id="to-lobby" type="button">ロビーへ戻る</button><button class="btn ghost" id="to-title" type="button">タイトルへ</button></div>`;
-  overlay.hidden=false; bindNetButtons();
+    <p class="lead">ホストの画面から6秒以上、状態が届きませんでした。ホストがページを閉じたか、タブを裏に回した可能性があります。</p>`,
+    footer('<button class="btn ghost" id="to-title" type="button">タイトルへ</button>', '<button class="btn" id="to-lobby" type="button">ロビーへ戻る</button>'));
+  bindNetButtons();
 }
 function bindNetButtons(){
   el('to-lobby').addEventListener('click',()=>{ leaveRoom(); newGame(true); showLobby(); });
@@ -2543,13 +2666,13 @@ function showNetResult(rank, reason, t){
   const label=i=>FACTIONS[i].name+(NAMES[i]?`（${esc(NAMES[i])}）`:'（AI）');
   const w=rank[0] ? rank[0][0]|0 : 0;
   const myRank=rank.findIndex(r=>(r[0]|0)===ME)+1;
-  card.className='card'; card.innerHTML=`
-    <div class="eyebrow">オンライン対戦の結果</div>
+  const again=RM.R && reason!=='quit';
+  screen('', CRUMB+' › オンライン › 結果', null, `
     <h1>${ME>=0 && w===ME ? 'あなたの勝利' : `${FACTIONS[w].name}の勝利`}</h1>
     <p class="lead">${reason==='quit' ? 'ホストが対戦を途中でやめました。その時点の順位です。' : reason==='net-sweep' ? `${t}秒で、${label(w)}が他の株をすべて駆逐しました。` : `${MATCH_LABEL}間の培養を終え、${label(w)}がバイオマス首位（${Math.round((+rank[0][2]||0)/total*100)}%）でした。`}${ME>=0 && myRank ? `あなたは${myRank}位です。` : ''}</p>
-    <div class="result-table">${rank.map((r,k)=>{ const i=Math.min(3,r[0]|0); return `<div class="${i===ME?'me':''}"><span>${k+1}位</span><i style="background:${FACTIONS[i].color}"></i><span class="nm">${label(i)}</span><span>${r[1]|0}個</span><span>${Math.round(+r[2]||0)}</span></div>`; }).join('')}</div>
-    <div class="btns">${RM.R && reason!=='quit' ? '<button class="btn" id="to-room" type="button">同じルームでもう一度</button>' : ''}<button class="btn ${RM.R && reason!=='quit'?'ghost':''}" id="to-lobby" type="button">ロビーへ戻る</button><button class="btn ghost" id="to-title" type="button">タイトルへ</button></div>`;
-  overlay.hidden=false; bindNetButtons();
+    <div class="result-table">${rank.map((r,k)=>{ const i=Math.min(3,r[0]|0); return `<div class="${i===ME?'me':''}"><span>${k+1}位</span><i style="background:${FACTIONS[i].color}"></i><span class="nm">${label(i)}</span><span>${r[1]|0}個</span><span>${Math.round(+r[2]||0)}</span></div>`; }).join('')}</div>`,
+    footer('<button class="btn ghost" id="to-title" type="button">タイトルへ</button>'+(again?'<button class="btn ghost" id="to-lobby" type="button">ロビーへ戻る</button>':''), again ? '<button class="btn" id="to-room" type="button">同じルームでもう一度</button>' : '<button class="btn" id="to-lobby" type="button">ロビーへ戻る</button>'));
+  bindNetButtons();
 }
 
 // ---------- ロビーとルーム ----------
@@ -2581,23 +2704,20 @@ function bindNameField(){
 function showLobby(){
   NET.inLobby=true; NET.inRoom=false; NET.lobbyHtml='';
   setWatchUI(false);
-  card.className='card title'; card.innerHTML=`
-    <div class="col">
-      <div class="eyebrow">オンライン対戦</div>
-      <h1>ロビー</h1>
-      <p class="lead">名前を入れて、ルームを作るか、右の一覧から参加してください。鍵付きのルームは、教えてもらったコードを下に打って入ります。4つの席（色）が人かAIで埋まると、自動で対戦が始まります。</p>
-      ${nameField()}
-      <div class="field"><span class="hud-title">作るルームの鍵</span><div class="seg ai-seg" id="lob-lock"><button type="button" data-lock="0" aria-pressed="${!LOB.lock}">鍵なし（だれでも入れる）</button><button type="button" data-lock="1" aria-pressed="${!!LOB.lock}">鍵あり（コードを知っている人だけ）</button></div></div>
-      <div class="btns"><button class="btn" id="lob-create" type="button">ルームを作る</button><button class="btn ghost" id="lob-back" type="button">戻る</button></div>
-      <div class="field"><label for="lob-code">コードで参加（鍵付きのルームはここから）</label><div class="code-row"><input id="lob-code" maxlength="6" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="例：${P2P?'k3v6q':'k3v6'}"><button class="btn small" id="lob-join" type="button">参加</button></div></div>
-      <p class="note" id="lob-status"></p>
-    </div>
-    <div class="col howto">
-      <div class="hud-title">開いているルーム</div>
-      <div class="rooms lob-list" id="lob-rooms"></div>
-    </div>`;
-  overlay.hidden=false;
-  const inp=bindNameField();
+  screen('wide', CRUMB+' › オンライン › ロビー', {id:'lob-back'}, `
+    <div class="cols">
+      <div>
+        <h1>ロビー</h1>
+        <p class="lead">ルームを作るか、右の一覧から参加してください。鍵付きのルームは、教えてもらったコードを打って入ります。名前はルームに入ってから決められます。</p>
+        <div class="field"><span class="hud-title">作るルームの鍵</span><div class="seg ai-seg" id="lob-lock"><button type="button" data-lock="0" aria-pressed="${!LOB.lock}">鍵なし（だれでも入れる）</button><button type="button" data-lock="1" aria-pressed="${!!LOB.lock}">鍵あり（コードを知っている人だけ）</button></div></div>
+        <div class="field"><label for="lob-code">コードで参加（鍵付きのルームはここから）</label><div class="code-row"><input id="lob-code" maxlength="6" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="例：${P2P?'k3v6q':'k3v6'}"><button class="btn small" id="lob-join" type="button">参加</button></div></div>
+        <p class="note" id="lob-status"></p>
+      </div>
+      <div class="panel-box">
+        <div class="hud-title">開いているルーム</div>
+        <div class="rooms lob-list" id="lob-rooms"></div>
+      </div>
+    </div>`, footer('', '<button class="btn" id="lob-create" type="button">ルームを作る</button>'));
   const newCode=()=>Math.random().toString(36).slice(2,2+(P2P?5:4)).padEnd(P2P?5:4,'0');
   el('lob-lock').addEventListener('click',e=>{ const b=e.target.closest('button[data-lock]'); if(!b) return; LOB.lock=b.dataset.lock==='1'; pressOnly(el('lob-lock'),'lock',LOB.lock?'1':'0'); });
   el('lob-create').addEventListener('click',()=>enterRoom(newCode(),true,LOB.lock));
@@ -2613,7 +2733,7 @@ function showLobby(){
   ci.addEventListener('keydown',e=>{ if(e.key==='Enter') go(); });
   if(P2P) startDir();
   lobbyPresence(); renderLobby();
-  inp.focus();
+  el('lob-create').focus();
 }
 // 一覧の1行。鍵付きはコードを見せず、コードの欄から入ってもらう
 function roomRow(a){
@@ -2681,16 +2801,23 @@ function seatsState(){
   return {st, hostP, cd:hostP ? hostP.presence.cd : null};
 }
 function showRoom(){
-  card.className='card'; card.innerHTML=`
-    <div class="eyebrow">オンライン対戦 ／ ルーム ${RM.code}${RM.lock?' ／ 鍵付き（一覧にコードは出ません。入ってほしい人にコードを伝えてください）':''}</div>
-    <h1>${RM.host ? 'あなたのルーム' : 'ルーム'}</h1>
-    <p class="lead" id="room-lead"></p>
-    ${nameField()}
-    ${RM.host ? aiLevelField() : ''}
-    <div class="seats" id="room-seats"></div>
-    <p class="note" id="lob-status"></p>
-    <div class="btns">${RM.host?'<button class="btn" id="room-start" type="button">スタート</button>':''}<button class="btn ghost" id="lob-live" type="button" hidden>進行中の対戦を観戦</button><button class="btn ghost" id="room-leave" type="button">ルームを出る</button></div>`;
-  overlay.hidden=false;
+  if(RM.R && RM.R.setQuiet) RM.R.setQuiet(false);
+  screen('wide', CRUMB+' › オンライン › ルーム '+RM.code+(RM.lock?'（鍵付き）':''), {id:'room-leave', label:'ルームを出る'}, `
+    <div class="cols">
+      <div>
+        <h1>${RM.host ? 'あなたのルーム' : 'ルーム'}</h1>
+        ${RM.lock?'<p class="note">鍵付きのルームです。一覧にはコードが出ないので、入ってほしい人にコードを伝えてください。</p>':''}
+        <p class="lead" id="room-lead"></p>
+        ${nameField()}
+        ${RM.host ? aiLevelField() : ''}
+      </div>
+      <div class="panel-box">
+        <div class="hud-title">席（色）</div>
+        <div class="seats" id="room-seats"></div>
+        <p class="note" id="lob-status"></p>
+      </div>
+    </div>`,
+    footer('<button class="btn ghost" id="lob-live" type="button" hidden>進行中の対戦を観戦</button>', RM.host?'<button class="btn" id="room-start" type="button">スタート</button>':''));
   bindNameField(); bindAiLevel();
   el('room-seats').addEventListener('click',e=>{
     const b=e.target.closest('button[data-act]'); if(!b) return;
@@ -2787,6 +2914,8 @@ function beginNet(role,g,players,mp){
   const mates=ME>=0 ? PL.filter((p,k)=>k!==MP && p.f===ME).length : 0;
   toast(ME>=0 ? `${FACTIONS[ME].name}として参加`+(mates?`（${mates+1}人チーム）`:'') : '観戦として参加');
   if(role==='host') startBgClock();
+  if(RM.R && RM.R.setQuiet) RM.R.setQuiet(role==='host');
+  NET.lastIn=''; NET.lastInAt=0; NET.pred=null;
 }
 // ---------- claude.ai の外（普通のWebサイト）での通信：WebRTC（PeerJS） ----------
 // アカウントなしで遊べるように、ブラウザ同士を直接つなぐ。ホストの画面が中継役になる星形のつながりで、
@@ -2807,7 +2936,9 @@ function makeP2PRoom(){
   };
   const setUp=v=>{ up=v; for(const f of connCbs){ try{ f(v); }catch(e){} } };
   // ホスト：全員の presence を1秒に約10回まとめて配る
-  const bcastPeers=()=>{ if(bcastTimer) return; bcastTimer=setTimeout(()=>{ bcastTimer=null; const arr=[...table.entries()]; for(const c of conns.values()) if(c.open) c.send({t:'peers',list:arr}); },100); };
+  // quiet（対戦中）は、参加者どうしが互いの様子を知る必要がないので、一覧の配信を2秒に1回にする
+  let quiet=false;
+  const bcastPeers=()=>{ if(bcastTimer) return; bcastTimer=setTimeout(()=>{ bcastTimer=null; const arr=[...table.entries()]; for(const c of conns.values()) if(c.open) c.send({t:'peers',list:arr}); },quiet?2000:100); };
   function onData(from,m){
     if(!m || typeof m!=='object') return;
     if(isHost){
@@ -2824,6 +2955,16 @@ function makeP2PRoom(){
     onPeers(f){ peersCbs.push(f); return ()=>{}; },
     on(t,f){ (handlers[t]=handlers[t]||[]).push(f); return ()=>{}; },
     peers:()=>list,
+    setQuiet(v){ quiet=!!v; },
+    // ホストだけ：peers（参加者のつながり番号）にだけ送る
+    emitTo(peers,topic,data){
+      if(!up) return Promise.resolve();
+      if(!isHost) return api.emit(topic,data);
+      const set=new Set(peers);
+      for(const [pid,c] of conns) if(set.has(pid) && c.open) c.send({t:'emit',topic,data,from:me});
+      if(set.has(me)) deliver(topic,data,me);
+      return Promise.resolve();
+    },
     emit(topic,data){
       if(!up) return Promise.resolve();
       if(isHost){ for(const c of conns.values()) if(c.open) c.send({t:'emit',topic,data,from:me}); deliver(topic,data,me); }
