@@ -111,11 +111,11 @@ body{background:var(--bg);color:var(--ink);font-family:var(--f-body);-webkit-use
 @media (max-width:760px){.card.title{grid-template-columns:minmax(0,1fr)}.hpane{min-height:0;max-height:38vh;overflow-y:auto}}
 .ver{color:var(--dim);font-size:10px;letter-spacing:.08em}
 #update-bar{position:absolute;left:50%;top:calc(10px + env(safe-area-inset-top,0px));transform:translateX(-50%);display:flex;align-items:center;gap:10px;padding:8px 12px;border:1px solid var(--f0);border-radius:8px;background:var(--panel);font-size:13px;max-width:calc(100% - 24px)}
-#bigmap{position:absolute;inset:0;display:grid;grid-template-rows:minmax(0,1fr) auto;gap:8px;padding:12px;background:rgba(4,7,10,.86)}
+#bigmap{position:absolute;left:10px;top:10px;width:min(62vmin,calc(100% - 20px));height:min(calc(62vmin + 70px),calc(100% - 20px));display:grid;grid-template-rows:minmax(0,1fr) auto;gap:6px;padding:8px;border:1px solid var(--line,rgba(255,255,255,.15));border-radius:8px;background:rgba(4,7,10,.5)}
 #bm-cv{width:100%;height:100%;min-height:0;display:block;cursor:crosshair;touch-action:none}
 .bm-tools button{font-size:12px;padding:6px 10px}
 .bm-foot{display:flex;flex-wrap:wrap;align-items:center;gap:8px}
-.bm-hint{margin:0;flex:1 1 260px;color:var(--dim);font-size:12px;line-height:1.5}
+.bm-hint{margin:0;flex:1 1 200px;color:var(--dim);font-size:11px;line-height:1.4}
 #map{cursor:zoom-in}
 .lvrows{display:grid;gap:4px}
 .lvrow{display:grid;grid-template-columns:8px minmax(0,1fr) auto;align-items:center;gap:6px;font-family:var(--f-body);font-size:11px}
@@ -355,7 +355,7 @@ const MIN_SPLIT = 36, P_MAX = 9, DNA_N = 130, CAP = Infinity, FOOD_N = 2800, MAT
 const FOOD_START = 880, FOOD_RAMP = 200;
 const MATCH_LABEL = `${MATCH_TIME/60}分`;
 // バージョン：BUILD は単体版を作るとき（build-standalone.js）に作成日時で置き換わる
-const APP_VERSION='3.5', BUILD='2026/11/02 15:52';
+const APP_VERSION='3.5.2', BUILD='2026/11/02 20:44';
 const versionLabel = () => `Ver ${APP_VERSION}`+(BUILD.startsWith('__')?'':`（${BUILD} 更新）`);
 const SPEED = 150;
 // プラスミドが容量いっぱいのときの養分の吸収率（次の容量へ育つ速さ）
@@ -1882,7 +1882,7 @@ function nearestBase(c,pred,maxD){
   for(const b of S.bases){ if(!pred(b)) continue; const d=Math.hypot(b.x-c.x,b.y-c.y); if(d<bd){ bd=d; best=b; } }
   return best;
 }
-// 拠点は大きな細胞：膜がゆっくり動き、持ち主の色に染まる。取り合いの色は中心から広がり、中のプラスミドの枠がゲージの分だけ埋まる
+// 拠点は大きな細胞：膜がゆっくり動き、持ち主の色に染まる。取り合いの色は中心から広がる。真ん中の大きなプラスミドが持ち主の色になる
 function drawBase(b,z){
   const own=b.owner>=0, gf=own?b.owner:b.cf, col=own?FACTIONS[b.owner].color:C.dim, pc=gf>=0?FACTIONS[gf].color:C.ink, prog=gf>=0?b.prog:0;
   const n=56, sd=b.i*2.1;
@@ -1897,12 +1897,10 @@ function drawBase(b,z){
   // 取っている途中は、取っている色が中心から広がる
   if(prog>0 && !own){ ctx.save(); ctx.clip(); ctx.globalAlpha=.2; ctx.fillStyle=pc; ctx.beginPath(); ctx.arc(0,0,b.r*1.05*Math.sqrt(prog),0,TAU); ctx.fill(); ctx.restore(); }
   ctx.globalAlpha=own?.85:.5; ctx.lineWidth=Math.max(b.big?9:6,(b.big?6:4)/z); ctx.strokeStyle=col; ctx.stroke();
-  // 中のプラスミドの枠（ゲージの分だけ色がつく）
-  const slots=b.big?9:6, on=Math.round(prog*slots), h=b.big?26:20, R=b.r*.56;
-  for(let i=0;i<slots;i++){
-    const a=i/slots*TAU-Math.PI/2+S.t*.05, x=Math.cos(a)*R, y=Math.sin(a)*R;
-    ctx.globalAlpha=i<on?.95:.22; drawPlasmid(x,y,h,i<on?pc:C.dim,2.5);
-  }
+  // 真ん中に大きなプラスミドが1つ。取った陣営の色になる
+  plasmidFrame(0,0,b.big?72:56);
+  ctx.globalAlpha=own?.55:.12; ctx.fillStyle=col; ctx.fill();
+  ctx.globalAlpha=own?.95:.35; ctx.strokeStyle=col; ctx.lineWidth=4; ctx.stroke();
   // 取り合いのゲージ（上から時計回り）
   if(prog>0){
     ctx.globalAlpha=.95; ctx.strokeStyle=pc; ctx.lineWidth=Math.max(5,4/z);
@@ -1985,7 +1983,7 @@ function requestSwitch(id){
 }
 const P2P_PAGE = !(window.claude && window.claude.use) && typeof location!=="undefined" && /^https?:$/.test(location.protocol);
 // ---------- 大きい全体マップ（Mキー） ----------
-// 画面いっぱいに全体マップを開く。左クリックでその場所を見る、右クリックで選んでいる細胞をそこへ移動。開いている間もゲームは進む
+// 左上に半透明の全体マップを開く（後ろのゲーム画面が透けて見える）。左クリックでその場所を見る、右クリックで選んでいる細胞をそこへ移動。開いている間もゲームは進む
 const bm=el('bigmap'), bmCv=el('bm-cv'), bmCtx=bmCv.getContext('2d');
 function openBigMap(on){
   if(on && !playing()) return;
@@ -2005,7 +2003,7 @@ function drawBigMap(){
   if(!playing()){ bm.hidden=true; return; }   // 試合が終わったら閉じる
   const g=bmCtx, G=bmGeom(), {cx,cy,R,sc}=G, tx=x=>cx+x*sc, ty=y=>cy+y*sc;
   g.setTransform(dpr,0,0,dpr,0,0); g.clearRect(0,0,G.w,G.h);
-  g.fillStyle=C.dish; g.beginPath(); g.arc(cx,cy,R,0,TAU); g.fill(); g.strokeStyle=C.rim; g.lineWidth=3; g.stroke();
+  g.globalAlpha=.5; g.fillStyle=C.dish; g.beginPath(); g.arc(cx,cy,R,0,TAU); g.fill(); g.globalAlpha=1; g.strokeStyle=C.rim; g.lineWidth=3; g.stroke();
   if(fogOn()){
     g.save(); g.beginPath(); g.arc(cx,cy,R,0,TAU); g.clip();
     g.fillStyle=C.fog; const cs=FOG_C*sc; g.beginPath();
@@ -2097,7 +2095,7 @@ bmCv.addEventListener('pointerup',e=>{
   // 何もない所：タッチで選んでいる細胞があれば命令、それ以外はその場所を見る（オートモードのみ。操作モードのカメラは元祖細胞を追う）
   if(d.touch && selectedCells().length){ orderAt(d.w0,true); return; }
   if(!d.shift) SEL.clear();
-  if(ctlMode==='auto'){ CAMF=false; S.cam.x=d.w0.x; S.cam.y=d.w0.y; openBigMap(false); }
+  if(ctlMode==='auto'){ CAMF=false; S.cam.x=d.w0.x; S.cam.y=d.w0.y; }
 });
 el('map').addEventListener('click',()=>openBigMap(true));
 // バージョン表示。単体版（Webサイト）では1分ごとに公開中のファイルを確かめ、新しい版が出ていたら知らせる
