@@ -111,11 +111,11 @@ body{background:var(--bg);color:var(--ink);font-family:var(--f-body);-webkit-use
 @media (max-width:760px){.card.title{grid-template-columns:minmax(0,1fr)}.hpane{min-height:0;max-height:38vh;overflow-y:auto}}
 .ver{color:var(--dim);font-size:10px;letter-spacing:.08em}
 #update-bar{position:absolute;left:50%;top:calc(10px + env(safe-area-inset-top,0px));transform:translateX(-50%);display:flex;align-items:center;gap:10px;padding:8px 12px;border:1px solid var(--f0);border-radius:8px;background:var(--panel);font-size:13px;max-width:calc(100% - 24px)}
-#bigmap{position:absolute;left:10px;top:10px;width:min(62vmin,calc(100% - 20px));height:min(calc(62vmin + 70px),calc(100% - 20px));display:grid;grid-template-rows:minmax(0,1fr) auto;gap:6px;padding:8px;border:1px solid var(--line,rgba(255,255,255,.15));border-radius:8px;background:rgba(4,7,10,.5)}
+#bigmap{position:absolute;inset:0;display:grid;grid-template-rows:minmax(0,1fr) auto;gap:8px;padding:12px;background:rgba(4,7,10,.86)}
 #bm-cv{width:100%;height:100%;min-height:0;display:block;cursor:crosshair;touch-action:none}
 .bm-tools button{font-size:12px;padding:6px 10px}
 .bm-foot{display:flex;flex-wrap:wrap;align-items:center;gap:8px}
-.bm-hint{margin:0;flex:1 1 200px;color:var(--dim);font-size:11px;line-height:1.4}
+.bm-hint{margin:0;flex:1 1 260px;color:var(--dim);font-size:12px;line-height:1.5}
 #map{cursor:zoom-in}
 .lvrows{display:grid;gap:4px}
 .lvrow{display:grid;grid-template-columns:8px minmax(0,1fr) auto;align-items:center;gap:6px;font-family:var(--f-body);font-size:11px}
@@ -137,16 +137,17 @@ body{background:var(--bg);color:var(--ink);font-family:var(--f-body);-webkit-use
 .mini{font:inherit;font-family:var(--f-body);font-size:11px;color:var(--ink);background:transparent;border:1px solid var(--panel-line);border-radius:4px;padding:4px 8px;cursor:pointer}
 .mini:hover{border-color:var(--dim)}
 .mini:focus-visible{outline:2px solid var(--ink);outline-offset:2px}
-#map{width:100%;aspect-ratio:1;max-width:100%;display:block}
+/* 小さい全体マップ：ゲーム画面の左上に重ねる。背景は半分透明 */
+#map{position:absolute;left:calc(10px + env(safe-area-inset-left,0px));top:calc(10px + env(safe-area-inset-top,0px));width:clamp(120px,24vmin,200px);aspect-ratio:1;display:block;border-radius:50%}
 .keys{color:var(--dim);font-size:11px;line-height:1.9}
 .keys kbd{font-family:var(--f-data);color:var(--ink);border:1px solid var(--panel-line);border-radius:3px;padding:0 4px}
 
 @media (max-aspect-ratio:1/1){
   #app{grid-template-columns:minmax(0,1fr);grid-template-rows:minmax(0,1fr) auto}
-  #side{display:grid;grid-template-columns:minmax(0,120px) minmax(0,1fr);gap:10px 14px;max-height:46vh;border-left:0;border-top:1px solid var(--panel-line);
+  #side{display:grid;grid-template-columns:minmax(0,120px) minmax(0,1fr);gap:10px 14px;align-items:start;max-height:46vh;border-left:0;border-top:1px solid var(--panel-line);
     padding:10px max(12px,env(safe-area-inset-right,0px)) calc(10px + env(safe-area-inset-bottom,0px)) max(12px,env(safe-area-inset-left,0px))}
-  #sec-map{grid-column:1;grid-row:1 / span 2}
-  #sec-time,#sec-mode,#sec-fac{grid-column:2}
+  #sec-time{grid-column:1;grid-row:1 / span 2}
+  #sec-mode,#sec-fac,#sec-ctl,#sec-watch{grid-column:2}
   #sec-keys,.mode small{display:none}
   #timer{font-size:22px}
 }
@@ -250,6 +251,7 @@ h1 .sub{display:block;font-size:.3em;color:var(--dim);letter-spacing:.3em;margin
       <button id="b-all" type="button">全選択</button>
       <button id="b-map" type="button">マップ</button>
     </div>
+    <canvas id="map" title="クリックで大きく開く（M）"></canvas>
     <div id="toast"></div>
     <div id="update-bar" hidden><span id="update-text"></span><button type="button" class="btn small" id="update-reload">再読み込み</button></div>
     <div id="bigmap" hidden>
@@ -306,11 +308,6 @@ h1 .sub{display:block;font-size:.3em;color:var(--dim);letter-spacing:.3em;margin
       </div>
     </section>
 
-    <section class="sec" id="sec-map">
-      <div class="hud-title">全体マップ</div>
-      <canvas id="map" title="クリックで大きく開く（M）"></canvas>
-    </section>
-
     <section class="sec" id="sec-fac">
       <div class="hud-title">陣営別バイオマス</div>
       <div id="share"></div>
@@ -355,7 +352,7 @@ const MIN_SPLIT = 36, P_MAX = 9, DNA_N = 130, CAP = Infinity, FOOD_N = 2800, MAT
 const FOOD_START = 880, FOOD_RAMP = 200;
 const MATCH_LABEL = `${MATCH_TIME/60}分`;
 // バージョン：BUILD は単体版を作るとき（build-standalone.js）に作成日時で置き換わる
-const APP_VERSION='3.5.2', BUILD='2026/11/02 20:44';
+const APP_VERSION='3.5.3', BUILD='2026/11/02 20:48';
 const versionLabel = () => `Ver ${APP_VERSION}`+(BUILD.startsWith('__')?'':`（${BUILD} 更新）`);
 const SPEED = 150;
 // プラスミドが容量いっぱいのときの養分の吸収率（次の容量へ育つ速さ）
@@ -1692,8 +1689,8 @@ const easeOutBack=t=>{const s=1.7;return 1+(s+1)*Math.pow(t-1,3)+s*Math.pow(t-1,
 function drawMap(){
   const g=mctx, R=mapS/2-3, sc=R/DISH_R, cx=mapS/2, cy=mapS/2;
   g.setTransform(dpr,0,0,dpr,0,0);
-  g.fillStyle=C.side; g.fillRect(0,0,mapS,mapS);
-  g.fillStyle=C.dish; g.beginPath(); g.arc(cx,cy,R,0,TAU); g.fill();
+  g.clearRect(0,0,mapS,mapS);
+  g.globalAlpha=.5; g.fillStyle=C.dish; g.beginPath(); g.arc(cx,cy,R,0,TAU); g.fill(); g.globalAlpha=1;
   g.strokeStyle=C.rim; g.lineWidth=2; g.stroke();
   // まだ見ていない場所を暗くする
   if(fogOn()){
@@ -1983,7 +1980,7 @@ function requestSwitch(id){
 }
 const P2P_PAGE = !(window.claude && window.claude.use) && typeof location!=="undefined" && /^https?:$/.test(location.protocol);
 // ---------- 大きい全体マップ（Mキー） ----------
-// 左上に半透明の全体マップを開く（後ろのゲーム画面が透けて見える）。左クリックでその場所を見る、右クリックで選んでいる細胞をそこへ移動。開いている間もゲームは進む
+// 画面いっぱいに全体マップを開く。左クリックでその場所を見る、右クリックで選んでいる細胞をそこへ移動。開いている間もゲームは進む
 const bm=el('bigmap'), bmCv=el('bm-cv'), bmCtx=bmCv.getContext('2d');
 function openBigMap(on){
   if(on && !playing()) return;
@@ -2003,7 +2000,7 @@ function drawBigMap(){
   if(!playing()){ bm.hidden=true; return; }   // 試合が終わったら閉じる
   const g=bmCtx, G=bmGeom(), {cx,cy,R,sc}=G, tx=x=>cx+x*sc, ty=y=>cy+y*sc;
   g.setTransform(dpr,0,0,dpr,0,0); g.clearRect(0,0,G.w,G.h);
-  g.globalAlpha=.5; g.fillStyle=C.dish; g.beginPath(); g.arc(cx,cy,R,0,TAU); g.fill(); g.globalAlpha=1; g.strokeStyle=C.rim; g.lineWidth=3; g.stroke();
+  g.fillStyle=C.dish; g.beginPath(); g.arc(cx,cy,R,0,TAU); g.fill(); g.strokeStyle=C.rim; g.lineWidth=3; g.stroke();
   if(fogOn()){
     g.save(); g.beginPath(); g.arc(cx,cy,R,0,TAU); g.clip();
     g.fillStyle=C.fog; const cs=FOG_C*sc; g.beginPath();
@@ -2095,7 +2092,7 @@ bmCv.addEventListener('pointerup',e=>{
   // 何もない所：タッチで選んでいる細胞があれば命令、それ以外はその場所を見る（オートモードのみ。操作モードのカメラは元祖細胞を追う）
   if(d.touch && selectedCells().length){ orderAt(d.w0,true); return; }
   if(!d.shift) SEL.clear();
-  if(ctlMode==='auto'){ CAMF=false; S.cam.x=d.w0.x; S.cam.y=d.w0.y; }
+  if(ctlMode==='auto'){ CAMF=false; S.cam.x=d.w0.x; S.cam.y=d.w0.y; openBigMap(false); }
 });
 el('map').addEventListener('click',()=>openBigMap(true));
 // バージョン表示。単体版（Webサイト）では1分ごとに公開中のファイルを確かめ、新しい版が出ていたら知らせる
