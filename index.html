@@ -52,9 +52,10 @@ body{background:var(--bg);color:var(--ink);font-family:var(--f-body);-webkit-use
 #app{position:fixed;inset:0;display:grid;grid-template-columns:minmax(0,1fr) 280px}
 #stage{position:relative;min-width:0;min-height:0;overflow:hidden}
 #cv{position:absolute;inset:0;width:100%;height:100%;display:block;touch-action:none;cursor:crosshair}
-#side{display:flex;flex-direction:column;gap:16px;min-height:0;overflow-y:auto;background:var(--side);border-left:1px solid var(--panel-line);
+#side{display:flex;flex-direction:column;gap:16px;min-height:0;min-width:0;overflow-y:auto;overflow-x:hidden;scrollbar-width:none;background:var(--side);border-left:1px solid var(--panel-line);
   padding:calc(14px + env(safe-area-inset-top,0px)) calc(14px + env(safe-area-inset-right,0px)) calc(14px + env(safe-area-inset-bottom,0px)) 14px;
   font-family:var(--f-data);font-size:12px;font-variant-numeric:tabular-nums}
+#side::-webkit-scrollbar{display:none}
 .sec{display:grid;gap:8px;align-content:start;min-width:0}
 .hud-title{font-size:10px;letter-spacing:.14em;color:var(--dim);text-transform:uppercase}
 #timer{font-family:var(--f-display);font-size:30px;letter-spacing:.04em;line-height:1}
@@ -74,7 +75,7 @@ body{background:var(--bg);color:var(--ink);font-family:var(--f-body);-webkit-use
 .mode[aria-pressed="true"] svg{fill:var(--f0)}
 .mode:focus-visible{outline:2px solid var(--ink);outline-offset:2px}
 .seg{display:flex;flex-wrap:wrap;gap:4px}
-.seg button{flex:1 1 auto;display:inline-flex;align-items:center;justify-content:center;gap:5px;font:inherit;font-size:11px;color:var(--ink);background:transparent;border:1px solid var(--panel-line);border-radius:4px;padding:5px 7px;cursor:pointer;font-family:var(--f-body)}
+.seg button{flex:1 1 auto;min-width:0;overflow-wrap:anywhere;display:inline-flex;align-items:center;justify-content:center;gap:5px;font:inherit;font-size:11px;color:var(--ink);background:transparent;border:1px solid var(--panel-line);border-radius:4px;padding:5px 7px;cursor:pointer;font-family:var(--f-body)}
 .seg button[aria-pressed="true"]{border-color:var(--f0);background:var(--sel)}
 .seg i{width:8px;height:8px;border-radius:50%;flex:none}
 .quit-note{color:var(--dim);font-family:var(--f-body);font-size:11px;line-height:1.5}
@@ -98,7 +99,7 @@ body{background:var(--bg);color:var(--ink);font-family:var(--f-body);-webkit-use
 .btn.ghost{background:transparent;color:var(--ink);border:1px solid var(--panel-line)}
 .ai-seg{max-width:220px}
 .keylist{display:grid;grid-template-columns:auto 1fr;gap:4px 10px;font-size:11px;line-height:1.5}
-.keylist span:nth-child(odd){color:var(--dim);white-space:nowrap}
+.keylist span:nth-child(odd){color:var(--dim)}
 .card.title{width:min(1000px,100%);grid-template-columns:minmax(0,.9fr) minmax(0,1.1fr);column-gap:36px;row-gap:14px;align-items:start}
 .card.title .col{display:grid;gap:16px;align-content:start}
 .card.title h1{font-size:clamp(40px,6.4vw,68px)}
@@ -151,9 +152,9 @@ body{background:var(--bg);color:var(--ink);font-family:var(--f-body);-webkit-use
   #sec-keys,.mode small{display:none}
   #timer{font-size:22px}
 }
-.frow{display:grid;grid-template-columns:10px 1fr auto;align-items:center;gap:8px}
+.frow{display:grid;grid-template-columns:10px minmax(0,1fr) auto;align-items:center;gap:8px}
 .frow .sw{width:10px;height:10px;border-radius:50%}
-.frow .nm{font-family:var(--f-body);font-size:12px;white-space:nowrap}
+.frow .nm{font-family:var(--f-body);font-size:12px;white-space:nowrap;min-width:0;overflow:hidden;text-overflow:ellipsis}
 .frow .nm small{color:var(--dim);font-family:var(--f-data);margin-left:4px}
 .frow .val{text-align:right}
 .frow.out{opacity:.35}
@@ -317,7 +318,7 @@ h1 .sub{display:block;font-size:.3em;color:var(--dim);letter-spacing:.3em;margin
     <section class="sec keys" id="sec-keys">
       <div class="hud-title">操作</div>
       <div class="ver" id="ver-label"></div>
-      <div class="keylist"><span>左クリック／ドラッグ</span><span>細胞を選ぶ（<kbd>Shift</kbd>で追加、ダブルクリックで同じモードを全部）</span><span>右クリック</span><span>選んだ細胞へ命令：地面＝移動、敵・トゲ＝攻撃（オートモードでは未選択なら元祖細胞）</span><span><kbd>1</kbd><kbd>2</kbd><kbd>3</kbd></span><span>選んだ細胞のモード変更（未選択なら次に生まれる細胞）</span><span><kbd>F</kbd></span><span>元祖細胞がカーソルへ発射</span><span><kbd>Q</kbd> <kbd>H</kbd> <kbd>C</kbd></span><span>全選択／停止（自動に戻す）／選んだ細胞に乗り換え</span><span><kbd>Tab</kbd></span><span>操作モード（元祖細胞がマウスに追従）とオートモード（RTS）の切り替え</span><span><kbd>WASD</kbd> ホイール</span><span>オートモードのカメラ移動（画面の端でも）・ズーム、<kbd>Space</kbd>で元祖細胞へ</span><span><kbd>M</kbd></span><span>全体マップ</span></div>
+      <div class="keylist"><span>左クリック／ドラッグ</span><span>細胞を選ぶ（<kbd>Shift</kbd>で追加、ダブルクリックで同じモードを全部）</span><span>右クリック</span><span>選んだ細胞へ命令：地面＝移動、敵・トゲ＝攻撃（オートモードでは未選択なら元祖細胞）</span><span><kbd>1</kbd><kbd>2</kbd><kbd>3</kbd></span><span>選んだ細胞のモード変更（未選択なら次に生まれる細胞）</span><span><kbd>F</kbd></span><span>元祖細胞がカーソルへ発射</span><span><kbd>Q</kbd> <kbd>H</kbd> <kbd>C</kbd></span><span>全選択／停止（自動に戻す）／選んだ細胞に乗り換え</span><span><kbd>X</kbd></span><span>選んだ細胞を、真ん中から外へ散開させる</span><span><kbd>Tab</kbd></span><span>操作モード（元祖細胞がマウスに追従）とオートモード（RTS）の切り替え</span><span><kbd>WASD</kbd> ホイール</span><span>オートモードのカメラ移動（画面の端でも）・ズーム、<kbd>Space</kbd>で元祖細胞へ</span><span><kbd>M</kbd></span><span>全体マップ</span></div>
     </section>
 
     <section class="sec" id="sec-quit" hidden>
@@ -352,7 +353,7 @@ const MIN_SPLIT = 36, P_MAX = 9, DNA_N = 130, CAP = Infinity, FOOD_N = 2800, MAT
 const FOOD_START = 880, FOOD_RAMP = 200;
 const MATCH_LABEL = `${MATCH_TIME/60}分`;
 // バージョン：BUILD は単体版を作るとき（build-standalone.js）に作成日時で置き換わる
-const APP_VERSION='3.5.3', BUILD='2026/11/02 20:48';
+const APP_VERSION='3.6', BUILD='2026/11/02 22:57';
 const versionLabel = () => `Ver ${APP_VERSION}`+(BUILD.startsWith('__')?'':`（${BUILD} 更新）`);
 const SPEED = 150;
 // プラスミドが容量いっぱいのときの養分の吸収率（次の容量へ育つ速さ）
@@ -1195,7 +1196,7 @@ function update(dt){
     c.splitCd-=dt; c.fuseCd-=dt; c.fireCd-=dt; c.pop=Math.min(1,c.pop+dt*4);
     const PI=c.leader && c.pid>=0 && human(c.f) ? INP[c.pid] : null;
     if(PI && PI.ctl!=='auto' && !PI.map){ c.ord=null; followMouse(c,PI); }
-    else if(c.ord && steerOrder(c)) {}
+    else if(c.ord && steerOrder(c,dt)) {}
     else if(c.leader) steerAI(c,dt);
     else steerMode(c,dt);
     // 大きいほど遅い：小さい細胞（質量20以下）を1として、質量150以上で0.8倍
@@ -1929,22 +1930,56 @@ function applyOrder(p,od){
     for(const c of list){ c.ord={t:'atk', tg, tk:od.tk}; c.home=null; }
     return;
   }
-  // 移動：大きい順に、目的地の周りへらせん状に少しずつずらして並べる
+  // 散開：選んだ細胞の外側の端（上下左右）から中心を出し、そこから外へ広がる場所へそれぞれ移動させる
+  if(od.t==='spread'){
+    const tg=spreadTargets(list);
+    list.forEach((c,i)=>{ c.ord={t:'move', x:tg[i].x, y:tg[i].y, arr:false}; c.home=null; c.anchor=null; c.wx=null; });
+    return;
+  }
+  // 移動：大きい順に、目的地の周りへらせん状に並べる。間隔は細胞の大きさに合わせる（重なって着けなくならないように）
   const x=clampN(od.x,-DISH_R,DISH_R), y=clampN(od.y,-DISH_R,DISH_R);
+  let acc=0;
   list.sort((a,b)=>b.mass-a.mass).forEach((c,i)=>{
-    const a=i*2.4, d=i ? 26*Math.sqrt(i)+c.r*.6 : 0;
-    c.ord={t:'move', x:x+Math.cos(a)*d, y:y+Math.sin(a)*d, arr:false}; c.home=null; c.anchor=null; c.wx=null;
+    const a=i*2.4, d=i ? Math.sqrt(acc)+c.r*.5 : 0;
+    acc+=(c.r*1.35)**2;
+    // 壁の外にはみ出した場所は、届くところまで内側へ寄せる
+    let tx=x+Math.cos(a)*d, ty=y+Math.sin(a)*d; const r=Math.hypot(tx,ty), lim=DISH_R-c.r-10; if(r>lim){ tx*=lim/r; ty*=lim/r; }
+    c.ord={t:'move', x:tx, y:ty, arr:false}; c.home=null; c.anchor=null; c.wx=null;
+  });
+}
+// 散開の行き先：中心は一番外側の細胞（上下左右の端）の真ん中。中心からの距離を広げ、さらに外へずらす
+function spreadTargets(list){
+  let x0=1e9, x1=-1e9, y0=1e9, y1=-1e9, rs=0;
+  for(const c of list){ x0=Math.min(x0,c.x); x1=Math.max(x1,c.x); y0=Math.min(y0,c.y); y1=Math.max(y1,c.y); rs+=c.r; }
+  const n=list.length, cx=(x0+x1)/2, cy=(y0+y1)/2, gap=Math.max(160, rs/n*2.2*Math.sqrt(n)+60);
+  return list.map((c,i)=>{
+    let dx=c.x-cx, dy=c.y-cy, d=Math.hypot(dx,dy);
+    if(d<8){ const a=wid(c)*2.4; dx=Math.cos(a); dy=Math.sin(a); d=0; } else { dx/=d; dy/=d; }
+    let x=cx+dx*(d*1.5+gap), y=cy+dy*(d*1.5+gap);
+    const r=Math.hypot(x,y), lim=DISH_R-c.r-20; if(r>lim){ x*=lim/r; y*=lim/r; }
+    return {x,y};
   });
 }
 // 命令に従って動かす。動かしたら true（false ならいつもの自動の動き）
-function steerOrder(c){
+function steerOrder(c,dt){
   const o=c.ord;
   if(o.t==='move'){
     if(o.arr) return false;
     if(o.ai && spikeFlee(c)) return true;
     const dx=o.x-c.x, dy=o.y-c.y, d=Math.hypot(dx,dy);
-    if(d<Math.max(28,c.r*.7)){ o.arr=true; if(c.leader){ c.home={x:o.x,y:o.y}; c.ord=null; } return false; }
-    const k=Math.min(1,d/90); c.dx=dx/d*k; c.dy=dy/d*k; return true;
+    const arrive=()=>{ o.arr=true; if(c.leader){ c.home={x:o.x,y:o.y}; c.ord=null; } return false; };
+    if(d<Math.max(28,c.r*.7)) return arrive();
+    // 詰まり対策：1.2秒近づけていなければ、目的地の近くならそこで着いたことにする。遠ければ少し横へよけて回り込む。
+    // よけても3回続けて近づけない（保護区の中など入れない場所）なら、そこで着いたことにする
+    if(o.bd===undefined || d<o.bd-3){ o.bd=d; o.st=0; } else o.st+=dt||0;
+    if(o.d0!==undefined && d<o.d0-100) o.ns=0;   // よけたあと十分近づけたら、数え直す
+    if(o.st>1.2){
+      if(d<c.r*3+120 || (o.ns||0)>=3) return arrive();
+      o.sd=Math.random()<.5?-1:1; o.sdT=.7; o.st=0; o.bd=d; o.d0=d; o.ns=(o.ns||0)+1;
+    }
+    const k=Math.min(1,d/90), ux=dx/d, uy=dy/d;
+    if(o.sdT>0){ o.sdT-=dt||0; c.dx=ux*.45-uy*o.sd*.9; c.dy=uy*.45+ux*o.sd*.9; return true; }
+    c.dx=ux*k; c.dy=uy*k; return true;
   }
   // 攻撃：相手が消えた・味方になった・トゲが倒れたら命令を終える
   const t=o.tg;
@@ -2119,7 +2154,7 @@ function encodeOrder(od){
   return {t:od.t, i:od.ids.slice(0,120).map(n=>enc(n,3)).join(''), x:Math.round(od.x||0), y:Math.round(od.y||0), k:od.tk||'', d:od.tid|0, m:od.m||''};
 }
 function decodeOrder(o){
-  const t=['move','atk','stop','mode'].includes(o.t) ? o.t : 'stop', str=String(o.i||'').slice(0,360), ids=[];
+  const t=['move','atk','stop','mode','spread'].includes(o.t) ? o.t : 'stop', str=String(o.i||'').slice(0,360), ids=[];
   for(let i=0;i+3<=str.length;i+=3) ids.push(dec(str,i,3));
   return {t, ids, x:clampN(o.x,-DISH_R,DISH_R), y:clampN(o.y,-DISH_R,DISH_R), tk:o.k==='s'?'s':'c', tid:o.d|0, m:String(o.m||'')};
 }
@@ -2127,7 +2162,8 @@ function sendOrder(od){
   if(S.net==='client'){
     const I=INP[MP]; I.oq.push({n:++ordN, ...encodeOrder(od)}); if(I.oq.length>6) I.oq.shift();
     // 参加者の画面では細胞の命令が届かないので、点線のために自分で出した命令を覚えておく
-    for(const id of od.ids){ if(od.t==='move') ORDL.set(id,{t:'move',x:od.x,y:od.y}); else if(od.t==='atk') ORDL.set(id,{t:'atk',tk:od.tk,tid:od.tid}); else if(od.t==='stop') ORDL.delete(id); }
+    for(const id of od.ids){ if(od.t==='move') ORDL.set(id,{t:'move',x:od.x,y:od.y,t0:S.t}); else if(od.t==='atk') ORDL.set(id,{t:'atk',tk:od.tk,tid:od.tid}); else if(od.t==='stop') ORDL.delete(id); }
+    if(od.t==='spread'){ const ids=new Set(od.ids), list=myCells().filter(c=>ids.has(wid(c))), tg=spreadTargets(list); list.forEach((c,i)=>ORDL.set(wid(c),{t:'move',x:tg[i].x,y:tg[i].y,t0:S.t})); }
     return;
   }
   applyOrder(MP,od);
@@ -2139,7 +2175,8 @@ function ordTarget(c){
   if(!o) return null;
   if(o.t==='move'){
     if(o.arr) return null;
-    if(!c.ord && Math.hypot(o.x-c.x,o.y-c.y)<Math.max(40,c.r)){ ORDL.delete(wid(c)); return null; }
+    // 参加者の画面：着いたか、詰まって近くで止まったまま20秒たったら線を消す
+    if(!c.ord && (Math.hypot(o.x-c.x,o.y-c.y)<Math.max(40,c.r) || S.t-(o.t0||0)>20)){ ORDL.delete(wid(c)); return null; }
     return {x:o.x, y:o.y, atk:false};
   }
   const t=o.tg || (o.tk==='s' ? S.spikes.find(k=>k.id===o.tid) : cells.find(x=>!x.dead && wid(x)===o.tid && x.f!==c.f));
@@ -2257,6 +2294,7 @@ addEventListener('keydown',e=>{
   if(e.code==='KeyQ') selectAll();
   if(e.code==='Tab'){ if(e.preventDefault) e.preventDefault(); setCtl(ctlMode==='auto'?'man':'auto',true); }
   if(e.code==='KeyH'){ const ids=selectedCells().map(wid); if(ids.length){ sendOrder({t:'stop',ids}); toast('命令を消した（自動で動く）'); } }
+  if(e.code==='KeyX'){ const ids=selectedCells().map(wid); if(ids.length){ sendOrder({t:'spread',ids}); toast(`${ids.length}個を散開させた`); } else toast('散開させる細胞を選んでください'); }
   if(e.code==='KeyC'){ const sel=selectedCells(); if(sel.length===1 && !sel[0].leader) requestSwitch(wid(sel[0])); else toast('乗り換える細胞を1つだけ選んでください'); }
 });
 addEventListener('keyup',e=>keys.delete(e.code));
@@ -2389,6 +2427,7 @@ const HOWTO=[
    ['1 2 3','選んだ細胞のモードを攻撃・防御・増殖に変える。何も選んでいないときは、次に生まれる細胞のモードを決める'],
    ['F','元祖細胞が、自分の色のプラスミドをカーソルの方向へ撃つ'],
    ['Q ／ H ／ C','全部選ぶ ／ 命令を消して自動に戻す ／ 選んだ1つの細胞に元祖細胞を乗り換える（5秒に1回）'],
+   ['X','選んだ細胞を散開させる。選んだ細胞のいちばん外側（上下左右の端）の真ん中から、外へ広がるように移動する'],
    ['カメラ','ホイールでズーム。オートモードでは WASD・矢印キー・画面の端で動かし、Space で元祖細胞へ戻る。M で全体マップ（左ドラッグで範囲選択、右クリックでそこへ移動）'],
    ['スマホ','細胞をタップで選ぶ、地面をタップで移動の命令。操作モードはドラッグで元祖細胞を動かし、オートモードはドラッグでカメラ移動。ボタンで切り替え・発射・全選択・マップ']],
   [['成長','緑の粒（養分）を食べると大きくなり、プラスミドの容量が 3 → 5 → 7 → 9 個と増える。9個そろうと4個と5個に分裂する'],
