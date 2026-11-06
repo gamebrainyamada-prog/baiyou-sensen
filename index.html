@@ -353,7 +353,7 @@ const MIN_SPLIT = 36, P_MAX = 9, DNA_N = 130, CAP = Infinity, FOOD_N = 2800, MAT
 const FOOD_START = 880, FOOD_RAMP = 200;
 const MATCH_LABEL = `${MATCH_TIME/60}分`;
 // バージョン：BUILD は単体版を作るとき（build-standalone.js）に作成日時で置き換わる
-const APP_VERSION='3.6', BUILD='2026/11/02 22:57';
+const APP_VERSION='3.6.1', BUILD='2026/11/06 09:31';
 const versionLabel = () => `Ver ${APP_VERSION}`+(BUILD.startsWith('__')?'':`（${BUILD} 更新）`);
 const SPEED = 150;
 // プラスミドが容量いっぱいのときの養分の吸収率（次の容量へ育つ速さ）
@@ -1912,6 +1912,7 @@ function drawBase(b,z){
 // 停止（命令を消して自動に戻る）・モード変更を出す。命令はプレイヤーごとで、その人の細胞だけが従う。
 // 子細胞は着いた場所から ANCHOR_R（モードごと）以上は離れない。元祖細胞は着いたらその周りで養分を食べて待つ
 const ANCHOR_R={atk:650, def:450, grow:350}, WID=238328;
+let ORD_G=0;
 // 集合地点から離れてよい距離（拠点を任されたAIの細胞は、その拠点の中＝lr）
 const leashOf = (A,m) => A && A.lr || ANCHOR_R[m];
 const wid = c => c.id%WID;
@@ -1932,19 +1933,20 @@ function applyOrder(p,od){
   }
   // 散開：選んだ細胞の外側の端（上下左右）から中心を出し、そこから外へ広がる場所へそれぞれ移動させる
   if(od.t==='spread'){
-    const tg=spreadTargets(list);
-    list.forEach((c,i)=>{ c.ord={t:'move', x:tg[i].x, y:tg[i].y, arr:false}; c.home=null; c.anchor=null; c.wx=null; });
+    const tg=spreadTargets(list), g=++ORD_G;
+    list.forEach((c,i)=>{ c.ord={t:'move', x:tg[i].x, y:tg[i].y, arr:false, g, sp:true}; c.home=null; c.anchor=null; c.wx=null; });
     return;
   }
   // 移動：大きい順に、目的地の周りへらせん状に並べる。間隔は細胞の大きさに合わせる（重なって着けなくならないように）
-  const x=clampN(od.x,-DISH_R,DISH_R), y=clampN(od.y,-DISH_R,DISH_R);
+  // g：同じ命令で動く群れの番号。点線を群れごとに1本にまとめて描くのに使う（gx,gy は群れの目的地）
+  const x=clampN(od.x,-DISH_R,DISH_R), y=clampN(od.y,-DISH_R,DISH_R), g=++ORD_G;
   let acc=0;
   list.sort((a,b)=>b.mass-a.mass).forEach((c,i)=>{
     const a=i*2.4, d=i ? Math.sqrt(acc)+c.r*.5 : 0;
     acc+=(c.r*1.35)**2;
     // 壁の外にはみ出した場所は、届くところまで内側へ寄せる
     let tx=x+Math.cos(a)*d, ty=y+Math.sin(a)*d; const r=Math.hypot(tx,ty), lim=DISH_R-c.r-10; if(r>lim){ tx*=lim/r; ty*=lim/r; }
-    c.ord={t:'move', x:tx, y:ty, arr:false}; c.home=null; c.anchor=null; c.wx=null;
+    c.ord={t:'move', x:tx, y:ty, arr:false, g, gx:x, gy:y}; c.home=null; c.anchor=null; c.wx=null;
   });
 }
 // 散開の行き先：中心は一番外側の細胞（上下左右の端）の真ん中。中心からの距離を広げ、さらに外へずらす
@@ -2162,36 +2164,64 @@ function sendOrder(od){
   if(S.net==='client'){
     const I=INP[MP]; I.oq.push({n:++ordN, ...encodeOrder(od)}); if(I.oq.length>6) I.oq.shift();
     // 参加者の画面では細胞の命令が届かないので、点線のために自分で出した命令を覚えておく
-    for(const id of od.ids){ if(od.t==='move') ORDL.set(id,{t:'move',x:od.x,y:od.y,t0:S.t}); else if(od.t==='atk') ORDL.set(id,{t:'atk',tk:od.tk,tid:od.tid}); else if(od.t==='stop') ORDL.delete(id); }
-    if(od.t==='spread'){ const ids=new Set(od.ids), list=myCells().filter(c=>ids.has(wid(c))), tg=spreadTargets(list); list.forEach((c,i)=>ORDL.set(wid(c),{t:'move',x:tg[i].x,y:tg[i].y,t0:S.t})); }
+    const g='c'+ordN;
+    for(const id of od.ids){ if(od.t==='move') ORDL.set(id,{t:'move',x:od.x,y:od.y,t0:S.t,g,gx:od.x,gy:od.y}); else if(od.t==='atk') ORDL.set(id,{t:'atk',tk:od.tk,tid:od.tid}); else if(od.t==='stop') ORDL.delete(id); }
+    if(od.t==='spread'){ const ids=new Set(od.ids), list=myCells().filter(c=>ids.has(wid(c))), tg=spreadTargets(list); list.forEach((c,i)=>ORDL.set(wid(c),{t:'move',x:tg[i].x,y:tg[i].y,t0:S.t,g,sp:true})); }
     return;
   }
   applyOrder(MP,od);
 }
 // 命令の行き先：移動中なら目的地、攻撃中なら相手の位置（なければ null）。点線を引くのに使う
 const ORDL=new Map();
-function ordTarget(c){
+// key：同じ命令の群れ（移動）か同じ相手（攻撃）なら同じ値。gx,gy は群れの目的地。tcache は攻撃相手を探した結果の使い回し
+function ordTarget(c,tcache){
   const o=c.ord || (S.net==='client' ? ORDL.get(wid(c)) : null);
   if(!o) return null;
   if(o.t==='move'){
     if(o.arr) return null;
     // 参加者の画面：着いたか、詰まって近くで止まったまま20秒たったら線を消す
     if(!c.ord && (Math.hypot(o.x-c.x,o.y-c.y)<Math.max(40,c.r) || S.t-(o.t0||0)>20)){ ORDL.delete(wid(c)); return null; }
-    return {x:o.x, y:o.y, atk:false};
+    return {x:o.x, y:o.y, atk:false, key:o.g, gx:o.gx, gy:o.gy, sp:o.sp};
   }
-  const t=o.tg || (o.tk==='s' ? S.spikes.find(k=>k.id===o.tid) : cells.find(x=>!x.dead && wid(x)===o.tid && x.f!==c.f));
+  const key='a'+o.tk+(o.tg ? (o.tk==='s'?o.tg.id:wid(o.tg)) : o.tid);
+  let t=o.tg;
+  if(!t){
+    if(tcache && tcache.has(key)) t=tcache.get(key);
+    else { t=o.tk==='s' ? S.spikes.find(k=>k.id===o.tid) : cells.find(x=>!x.dead && wid(x)===o.tid && x.f!==c.f); if(tcache) tcache.set(key,t); }
+  }
   if(!t || t.dead || (o.tk!=='s' && t.f===c.f)){ if(!c.ord) ORDL.delete(wid(c)); return null; }
-  return {x:t.x, y:t.y, atk:true};
+  return {x:t.x, y:t.y, atk:true, key, gx:t.x, gy:t.y};
 }
-// 点線と、目的地の小さな輪を描く（tx/ty はワールド座標→描く座標、lw は線の太さ、dash は点線の間隔）
+// 点線と、目的地の小さな輪を描く（tx/ty はワールド座標→描く座標、lw は線の太さ、dash は点線の間隔）。
+// 点線は重いので、同じ命令の群れが ORD_BUNDLE 個以上なら群れの真ん中から1本だけ引く（散開は行き先の輪だけ）。線と輪はそれぞれ1回でまとめて描く
+const ORD_BUNDLE=5;
 function drawOrdLines(g,tx,ty,lw,dash,rr){
-  g.save(); g.lineWidth=lw; g.setLineDash([dash,dash*.9]);
+  const groups=new Map(), solo=[], tcache=new Map();
   for(const c of cells){
     if(c.dead || !isMine(c)) continue;
-    const t=ordTarget(c); if(!t) continue;
-    g.strokeStyle=t.atk?C.warn:C.ink; g.globalAlpha=.65;
-    g.beginPath(); g.moveTo(tx(c.x),ty(c.y)); g.lineTo(tx(t.x),ty(t.y)); g.stroke();
-    g.globalAlpha=.9; g.setLineDash([]); g.beginPath(); g.arc(tx(t.x),ty(t.y),rr,0,Math.PI*2); g.stroke(); g.setLineDash([dash,dash*.9]);
+    const t=ordTarget(c,tcache); if(!t) continue;
+    if(t.key===undefined){ solo.push([c.x,c.y,t.x,t.y,t.atk]); continue; }
+    let G=groups.get(t.key); if(!G){ G={n:0,sx:0,sy:0,atk:t.atk,gx:t.gx,gy:t.gy,sp:t.sp,list:[]}; groups.set(t.key,G); }
+    G.n++; G.sx+=c.x; G.sy+=c.y; G.list.push([c.x,c.y,t.x,t.y,t.atk]);
+  }
+  const lines=[[],[]], rings=[[],[]];   // [移動, 攻撃]
+  for(const s of solo){ lines[+s[4]].push(s); rings[+s[4]].push([s[2],s[3]]); }
+  for(const G of groups.values()){
+    const k=+G.atk;
+    if(G.n>=ORD_BUNDLE && G.sp){ for(const s of G.list) rings[k].push([s[2],s[3]]); }
+    else if(G.n>=ORD_BUNDLE){ lines[k].push([G.sx/G.n,G.sy/G.n,G.gx,G.gy]); rings[k].push([G.gx,G.gy]); }
+    else for(const s of G.list){ lines[k].push(s); rings[k].push([s[2],s[3]]); }
+  }
+  g.save(); g.lineWidth=lw;
+  for(let k=0;k<2;k++){
+    if(!lines[k].length) continue;
+    g.strokeStyle=k?C.warn:C.ink;
+    g.globalAlpha=.65; g.setLineDash([dash,dash*.9]); g.beginPath();
+    for(const s of lines[k]){ g.moveTo(tx(s[0]),ty(s[1])); g.lineTo(tx(s[2]),ty(s[3])); }
+    g.stroke();
+    g.globalAlpha=.9; g.setLineDash([]); g.beginPath();
+    for(const p of rings[k]){ const x=tx(p[0]), y=ty(p[1]); g.moveTo(x+rr,y); g.arc(x,y,rr,0,Math.PI*2); }
+    g.stroke();
   }
   g.restore();
 }
